@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 18:11 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Fixed battle mode not visibly appearing after encounters by enforcing `[hidden] { display: none !important; }`, preventing explicit grid/flex display styles from overriding mode visibility.
+- Files changed: `src/styles.css`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/travelCombat.js` passed; `curl -I http://127.0.0.1:4175/src/styles.css` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`.
+
 ## 2026-05-28 18:10 CDT - Codex - feature/codex/2175-context-integration
 
 - Status: ready-for-review

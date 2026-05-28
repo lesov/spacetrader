@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { FUEL_RESOURCE_ID, campaign, planets, resources } from "../src/data.js";
@@ -387,6 +388,12 @@ test("map legend explains current location and destination risk colors", () => {
     ["Current location", "Low risk", "Moderate risk", "High risk"]
   );
   assert.equal(getMapLegendRows().every((row) => /^#[0-9a-f]{6}$/i.test(row.color)), true);
+});
+
+test("stylesheet preserves hidden mode switching for battle screen", () => {
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\[hidden\]\s*\{[^}]*display:\s*none\s*!important;/s);
 });
 
 test("messages are generated for successful and failed actions", () => {

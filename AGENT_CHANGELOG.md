@@ -1,5 +1,41 @@
 # Agent Changelog
 
+## 2026-05-28 13:05 CDT - Codex - feature/codex/solar-system-trading-mvp
+
+- Status: merged
+- Summary: Implementing requested Solar System trading MVP changes: real Solar System trade locations, travel confirmation before leaving untraded locations, and slider-based multi-unit buy/sell controls.
+- Files changed: `README.md`, `index.html`, `package.json`, `src/app.js`, `src/data.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4174` returned `200 OK`; `curl -I http://127.0.0.1:4174/src/app.js` returned `200 OK`.
+- UI review: approved-by-human
+- Blockers or coordination notes: Work was isolated in `/tmp/spacetrader-codex-solar-build` on branch `feature/codex/solar-system-trading-mvp`. Local server started on port `4174` for human UI testing. Another active agent is working in `/tmp/spacetrader-claude-combat-plan`; do not touch or overwrite that work. Human approval received on 2026-05-28 13:19 CDT to merge this trading MVP work to `main`, tag it as `trading_v1`, and push. Merged to `main` locally on 2026-05-28 13:19 CDT.
+
+## 2026-05-28 13:00 CDT - Codex - feature/codex/solar-system-trading-prep
+
+- Status: ready-for-review
+- Summary: Preparing requested MVP changes: travel confirmation when no trade occurred at the current location, slider-based multi-unit buy/sell controls, and conversion of the setting to distant-future Solar System planets and satellites.
+- Files changed: `MVP_EXECUTION_PLAN.md`, `AGENT_CHANGELOG.md`
+- Tests run: Not applicable; planning/prep documentation change.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-solar-prep` on branch `feature/codex/solar-system-trading-prep`, based on `feature/codex/local-space-trader-mvp`. Another active agent worktree exists at `/tmp/spacetrader-claude-combat-plan` on `docs/claude/combat-mvp-plan`; do not touch it. Future changelog merges must preserve Claude's combat-plan entry.
+
+## 2026-05-28 12:42 CDT - Codex - feature/codex/local-space-trader-mvp
+
+- Status: ready-for-review
+- Summary: Building the local browser MVP from `MVP_EXECUTION_PLAN.md`, including deterministic planet/resource data, pure game rules, automated regression tests, and a playable single-screen web UI.
+- Files changed: `README.md`, `package.json`, `index.html`, `src/data.js`, `src/game.js`, `src/uiState.js`, `src/app.js`, `src/styles.css`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4173` returned `200 OK`; `curl -I http://127.0.0.1:4173/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-mvp-build` on branch `feature/codex/local-space-trader-mvp`. Local server started on port `4173` for human UI testing. UI must be human tested and explicitly approved before completion.
+
+## 2026-05-28 12:40 CDT - Codex - docs/codex/mvp-execution-plan
+
+- Status: ready-for-review
+- Summary: Creating a small local-only MVP execution plan for a browser-based space trading game with planets, resource production, per-planet price ranges, fuel travel costs, fuel purchasing, cargo limits, and arbitrage-focused gameplay.
+- Files changed: `MVP_EXECUTION_PLAN.md`, `AGENT_CHANGELOG.md`
+- Tests run: Not applicable; planning-only documentation change.
+- UI review: not-applicable
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-mvp-plan` on branch `docs/codex/mvp-execution-plan`.
+
 ## 2026-05-28 12:17 CDT - Codex - docs-codex-agent-workflow-instructions
 
 - Status: merged

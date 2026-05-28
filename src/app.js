@@ -19,6 +19,8 @@ let state = createInitialState();
 let pendingTravel = null;
 
 const elements = {
+  campaignLabel: document.querySelector("#campaign-label"),
+  marketClimate: document.querySelector("#market-climate"),
   credits: document.querySelector("#credits"),
   fuel: document.querySelector("#fuel"),
   cargoSpace: document.querySelector("#cargo-space"),
@@ -27,6 +29,9 @@ const elements = {
   routeLine: document.querySelector("#route-line"),
   planetHeading: document.querySelector("#planet-heading"),
   planetNote: document.querySelector("#planet-note"),
+  locationAlignment: document.querySelector("#location-alignment"),
+  locationRisk: document.querySelector("#location-risk"),
+  strategicContext: document.querySelector("#strategic-context"),
   productionList: document.querySelector("#production-list"),
   destinations: document.querySelector("#destinations"),
   marketBody: document.querySelector("#market-body"),
@@ -91,6 +96,8 @@ function render() {
 
 function renderStatus() {
   const status = getStatusView(state);
+  elements.campaignLabel.textContent = status.campaignLabel;
+  elements.marketClimate.textContent = status.marketClimate;
   elements.credits.textContent = status.credits;
   elements.fuel.textContent = status.fuel;
   elements.cargoSpace.textContent = status.cargo;
@@ -102,7 +109,11 @@ function renderStatus() {
 function renderPlanetPanel() {
   const planet = getPlanet(state.currentPlanetId);
   elements.planetHeading.textContent = planet.name;
-  elements.planetNote.textContent = `${planet.type} | ${planet.note}`;
+  elements.planetNote.textContent = `${planet.type} | ${planet.summary}`;
+  elements.locationAlignment.textContent = planet.factionAlignment;
+  elements.locationRisk.textContent = `${planet.riskLevel} risk`;
+  elements.locationRisk.dataset.risk = planet.riskLevel;
+  elements.strategicContext.textContent = planet.strategicContext;
 
   elements.productionList.replaceChildren(
     ...planet.produces.map((resourceId) => {
@@ -120,7 +131,7 @@ function renderPlanetPanel() {
       button.type = "button";
       button.className = "destination-button";
       button.disabled = !destination.canTravel;
-      button.innerHTML = `<span>${destination.name}<small>${destination.type}</small></span><strong>${destination.fuelCost} fuel</strong>`;
+      button.innerHTML = `<span>${destination.name}<small>${destination.type} | ${destination.factionAlignment} | ${destination.riskLevel} risk</small></span><strong>${destination.fuelCost} fuel</strong>`;
       button.addEventListener("click", () => handleTravel(destination.id));
       return button;
     })
@@ -219,8 +230,9 @@ function drawMap() {
   for (const planet of mapPlanets) {
     ctx.beginPath();
     ctx.arc(planet.x, planet.y, planet.active ? 14 : 10, 0, Math.PI * 2);
-    ctx.fillStyle = planet.active ? "#f7b955" : "#6ad3d1";
-    ctx.shadowColor = planet.active ? "#f7b955" : "#6ad3d1";
+    const markerColor = planet.active ? "#f7b955" : getRiskColor(planet.riskLevel);
+    ctx.fillStyle = markerColor;
+    ctx.shadowColor = markerColor;
     ctx.shadowBlur = planet.active ? 18 : 8;
     ctx.fill();
     ctx.shadowBlur = 0;
@@ -282,6 +294,16 @@ function closeTravelDialog() {
   if (elements.travelDialog.open) {
     elements.travelDialog.close();
   }
+}
+
+function getRiskColor(riskLevel) {
+  if (riskLevel === "high") {
+    return "#f06d6d";
+  }
+  if (riskLevel === "moderate") {
+    return "#f7b955";
+  }
+  return "#6ad3d1";
 }
 
 render();

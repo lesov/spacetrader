@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 17:39 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Integrated the 2175 campaign-start setting from `Humanity_in_2225.txt` and hidden design context from `HIDDEN_CONTEXT_Real_World_Mapping.txt` into the existing trading MVP without exposing the hidden mapping to players.
+- Files changed: `README.md`, `index.html`, `src/app.js`, `src/data.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-2175-context`; hidden context remains non-player-facing. Local server is running on port `4175` because port `4174` was already occupied. Human UI testing and approval are still required before completion or merge.
+
 ## 2026-05-28 13:05 CDT - Codex - feature/codex/solar-system-trading-mvp
 
 - Status: merged

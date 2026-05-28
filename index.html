@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Space Trader Local MVP</title>
+    <title>Space Trader 2175 Local MVP</title>
     <link rel="stylesheet" href="./src/styles.css">
   </head>
   <body>
@@ -12,6 +12,7 @@
         <header class="topbar">
           <div>
             <h1>Space Trader</h1>
+            <p class="campaign-line"><span id="campaign-label"></span> | <span id="market-climate"></span></p>
             <p id="route-line" class="route-line"></p>
           </div>
           <dl class="status-grid" aria-label="Ship status">
@@ -48,9 +49,14 @@
               <p class="eyebrow">Current Market</p>
               <h2 id="planet-heading"></h2>
               <p id="planet-note" class="planet-note"></p>
+              <div class="location-meta" aria-label="Location context">
+                <span id="location-alignment"></span>
+                <span id="location-risk"></span>
+              </div>
+              <p id="strategic-context" class="strategic-context"></p>
             </div>
             <div>
-              <h3>Production</h3>
+              <h3>Exports</h3>
               <div id="production-list" class="chip-row"></div>
             </div>
             <div>

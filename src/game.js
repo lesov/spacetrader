@@ -1,4 +1,4 @@
-import { FUEL_RESOURCE_ID, planets, resources, startingPlayer } from "./data.js";
+import { FUEL_RESOURCE_ID, campaign, planets, resources, startingPlayer } from "./data.js";
 
 export const PLANET_BY_ID = Object.fromEntries(planets.map((planet) => [planet.id, planet]));
 export const RESOURCE_BY_ID = Object.fromEntries(resources.map((resource) => [resource.id, resource]));
@@ -14,7 +14,7 @@ export function createInitialState() {
     cargoCapacity: startingPlayer.cargoCapacity,
     cargo: {},
     tradedAtCurrentLocation: false,
-    messages: [`Docked at ${startingPlanet.name}. Arbitrage run initialized.`]
+    messages: [`Docked at ${startingPlanet.name}. ${campaign.startLabel} trading charter initialized.`]
   };
 }
 
@@ -206,7 +206,30 @@ export function cancelTravelConfirmation(state, destinationPlanetId) {
 
 export function validateMarketData() {
   const errors = [];
-  const allowedLocationNames = new Set(["Mars", "Europa", "Titan", "Mercury", "Ganymede", "Luna"]);
+  const allowedLocationNames = new Set([
+    "Callisto",
+    "Ceres",
+    "Earth",
+    "Enceladus",
+    "Europa",
+    "Ganymede",
+    "Io",
+    "Luna",
+    "Mars",
+    "Mercury",
+    "Titan",
+    "Triton",
+    "Venus"
+  ]);
+  const allowedAlignments = new Set([
+    "Earth-aligned",
+    "Mars-aligned",
+    "Titan-influenced",
+    "neutral",
+    "contested",
+    "independent"
+  ]);
+  const allowedRiskLevels = new Set(["low", "moderate", "high"]);
 
   for (const planet of planets) {
     if (!allowedLocationNames.has(planet.name)) {
@@ -215,6 +238,18 @@ export function validateMarketData() {
 
     if (!planet.type) {
       errors.push(`${planet.name} must define a Solar System location type.`);
+    }
+
+    if (!allowedAlignments.has(planet.factionAlignment)) {
+      errors.push(`${planet.name} must define an approved faction alignment.`);
+    }
+
+    if (!allowedRiskLevels.has(planet.riskLevel)) {
+      errors.push(`${planet.name} must define an approved risk level.`);
+    }
+
+    if (!planet.summary || !planet.strategicContext || !planet.note) {
+      errors.push(`${planet.name} must define player-facing setting context.`);
     }
 
     if (planet.produces.length !== 3) {

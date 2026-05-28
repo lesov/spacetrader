@@ -1,5 +1,6 @@
 import {
   FUEL_RESOURCE_ID,
+  campaign,
   planets,
   resources
 } from "./data.js";
@@ -29,11 +30,13 @@ export function getStatusView(state) {
   const planet = getPlanet(state.currentPlanetId);
   const cargoUsed = getCargoUsed(state);
   return {
+    campaignLabel: campaign.startLabel,
+    marketClimate: campaign.marketClimate,
     credits: formatCredits(state.credits),
     fuel: formatFuel(state.fuel),
     cargo: formatCargo(cargoUsed, state.cargoCapacity),
     currentPlanet: planet.name,
-    routeLine: `${planet.name} ${planet.type.toLowerCase()} port | ${getCargoRemaining(state)} cargo slots open`,
+    routeLine: `${planet.name} ${planet.type.toLowerCase()} trade hub | ${getCargoRemaining(state)} cargo slots open`,
     tradeStatus: state.tradedAtCurrentLocation ? "Trade logged here" : "No local trade yet"
   };
 }
@@ -71,6 +74,8 @@ export function getDestinationRows(state) {
     id: planet.id,
     name: planet.name,
     type: planet.type,
+    factionAlignment: planet.factionAlignment,
+    riskLevel: planet.riskLevel,
     fuelCost: getTravelCost(state.currentPlanetId, planet.id),
     canTravel: state.fuel >= getTravelCost(state.currentPlanetId, planet.id),
     requiresConfirmation: !state.tradedAtCurrentLocation
@@ -95,6 +100,7 @@ export function getPlanetMapView(state) {
     x: planet.position.x,
     y: planet.position.y,
     active: planet.id === state.currentPlanetId,
+    riskLevel: planet.riskLevel,
     produces: planet.produces
   }));
 }

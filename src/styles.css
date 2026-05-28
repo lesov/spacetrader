@@ -114,9 +114,16 @@ h3 {
 
 .route-line,
 .planet-note,
+.campaign-line,
+.strategic-context,
 .section-heading span,
 .eyebrow {
   color: var(--muted);
+}
+
+.campaign-line {
+  margin-top: 8px;
+  font-weight: 700;
 }
 
 .route-line {
@@ -187,6 +194,43 @@ h3 {
 
 .planet-note {
   margin-top: 8px;
+}
+
+.strategic-context {
+  margin-top: 10px;
+  line-height: 1.45;
+}
+
+.location-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.location-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid rgba(106, 211, 209, 0.5);
+  border-radius: 999px;
+  color: #e6fffb;
+  background: rgba(106, 211, 209, 0.11);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.location-meta [data-risk="high"] {
+  border-color: rgba(240, 109, 109, 0.6);
+  color: #ffe1e1;
+  background: rgba(240, 109, 109, 0.13);
+}
+
+.location-meta [data-risk="moderate"] {
+  border-color: rgba(247, 185, 85, 0.62);
+  color: #fff1cf;
+  background: rgba(247, 185, 85, 0.13);
 }
 
 .chip-row {

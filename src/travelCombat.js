@@ -9,16 +9,16 @@ import {
 import { advanceDate, getPlanet, getTravelDurationDays, getTravelCost, serializeCombatShip } from "./game.js";
 
 export const ENCOUNTER_CHANCE_BY_RISK = {
-  low: 0.08,
-  moderate: 0.22,
-  high: 0.4
+  low: 0.12,
+  moderate: 0.3,
+  high: 0.55
 };
 
 export function getEncounterChance(state, destinationPlanetId) {
   const destination = getPlanet(destinationPlanetId);
   const baseChance = ENCOUNTER_CHANCE_BY_RISK[destination.riskLevel] ?? ENCOUNTER_CHANCE_BY_RISK.low;
-  const routeModifier = getTravelCost(state.currentPlanetId, destinationPlanetId) * 0.015;
-  return clamp(baseChance + routeModifier, 0.05, 0.85);
+  const routeModifier = getTravelCost(state.currentPlanetId, destinationPlanetId) * 0.02;
+  return clamp(baseChance + routeModifier, 0.08, 0.9);
 }
 
 export function rollTravelEncounter(state, destinationPlanetId, rng) {

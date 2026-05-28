@@ -35,9 +35,9 @@ test("encounter chance is destination-risk based with route modifier", () => {
   const titanCost = getTravelCost("luna", "titan");
   const mercuryCost = getTravelCost("luna", "mercury");
 
-  assert.equal(getEncounterChance(state, "earth"), ENCOUNTER_CHANCE_BY_RISK.low + earthCost * 0.015);
-  assert.equal(getEncounterChance(state, "titan"), ENCOUNTER_CHANCE_BY_RISK.moderate + titanCost * 0.015);
-  assert.equal(getEncounterChance(state, "mercury"), ENCOUNTER_CHANCE_BY_RISK.high + mercuryCost * 0.015);
+  assert.equal(getEncounterChance(state, "earth"), ENCOUNTER_CHANCE_BY_RISK.low + earthCost * 0.02);
+  assert.equal(getEncounterChance(state, "titan"), ENCOUNTER_CHANCE_BY_RISK.moderate + titanCost * 0.02);
+  assert.equal(getEncounterChance(state, "mercury"), ENCOUNTER_CHANCE_BY_RISK.high + mercuryCost * 0.02);
   assert.ok(getEncounterChance(state, "mercury") < 1);
   assert.ok(getEncounterChance(state, "europa") > getEncounterChance(state, "earth"));
   assert.ok(getEncounterChance(state, "mercury") > getEncounterChance(state, "venus"));
@@ -250,7 +250,7 @@ test("destination rows expose encounter risk labels", () => {
   const rows = getDestinationRows(createInitialState());
 
   assert.ok(rows.length > 0);
-  assert.equal(rows.every((row) => row.encounterChance >= 0.05 && row.encounterChance <= 0.85), true);
-  assert.equal(rows.some((row) => row.riskLevel === "high" && row.encounterChance > 0.4 && row.encounterChance < 1), true);
+  assert.equal(rows.every((row) => row.encounterChance >= 0.08 && row.encounterChance <= 0.9), true);
+  assert.equal(rows.some((row) => row.riskLevel === "high" && row.encounterChance > 0.55 && row.encounterChance < 1), true);
   assert.equal(rows.every((row) => /\d+% battle risk/.test(row.encounterRiskLabel)), true);
 });

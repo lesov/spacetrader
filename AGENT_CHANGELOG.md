@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 18:10 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Rechecked and tuned battle encounter odds so fights are more noticeable while still based on route distance, destination risk, and a random roll rather than guaranteed high-risk combat.
+- Files changed: `src/travelCombat.js`, `test/travelCombat.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/travelCombat.js` passed; `node --check src/app.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/travelCombat.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`.
+
 ## 2026-05-28 18:02 CDT - Codex - feature/codex/2175-context-integration
 
 - Status: ready-for-review

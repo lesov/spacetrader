@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 12:40 CDT - Codex - docs/codex/mvp-execution-plan
+
+- Status: ready-for-review
+- Summary: Creating a small local-only MVP execution plan for a browser-based space trading game with planets, resource production, per-planet price ranges, fuel travel costs, fuel purchasing, cargo limits, and arbitrage-focused gameplay.
+- Files changed: `MVP_EXECUTION_PLAN.md`, `AGENT_CHANGELOG.md`
+- Tests run: Not applicable; planning-only documentation change.
+- UI review: not-applicable
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-mvp-plan` on branch `docs/codex/mvp-execution-plan`.
+
 ## 2026-05-28 12:17 CDT - Codex - docs-codex-agent-workflow-instructions
 
 - Status: merged

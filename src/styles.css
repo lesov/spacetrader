@@ -125,7 +125,7 @@ h3 {
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -228,6 +228,13 @@ h3 {
   font-size: 0.82rem;
 }
 
+.destination-button small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .trade-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
@@ -254,7 +261,7 @@ h3 {
 
 .market-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 900px;
   border-collapse: collapse;
 }
 
@@ -286,14 +293,33 @@ h3 {
   background: var(--green);
 }
 
-.quantity-input {
-  width: 76px;
-  min-height: 36px;
-  padding: 6px 8px;
+.quantity-slider {
+  display: grid;
+  grid-template-columns: minmax(92px, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+  min-width: 138px;
+}
+
+.quantity-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--teal);
+}
+
+.quantity-slider input[type="range"]:disabled {
+  opacity: 0.45;
+}
+
+.quantity-slider output {
+  min-width: 30px;
+  padding: 3px 5px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 5px;
   color: var(--text);
   background: var(--input);
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .trade-button {
@@ -352,6 +378,45 @@ h3 {
   color: var(--muted);
 }
 
+.travel-dialog {
+  width: min(420px, calc(100vw - 28px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.travel-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.travel-dialog form {
+  display: grid;
+  gap: 14px;
+}
+
+.travel-dialog p {
+  color: var(--muted);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dialog-actions button {
+  min-width: 88px;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+#confirm-travel {
+  border-color: rgba(247, 185, 85, 0.7);
+}
+
 @media (max-width: 960px) {
   .topbar,
   .flight-deck,
@@ -360,7 +425,7 @@ h3 {
   }
 
   .status-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

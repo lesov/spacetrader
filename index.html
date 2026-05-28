@@ -28,15 +28,19 @@
               <dd id="cargo-space"></dd>
             </div>
             <div>
-              <dt>Planet</dt>
+              <dt>Location</dt>
               <dd id="current-planet"></dd>
+            </div>
+            <div>
+              <dt>Local Trade</dt>
+              <dd id="trade-status"></dd>
             </div>
           </dl>
         </header>
 
         <section class="flight-deck">
           <div class="map-panel">
-            <canvas id="star-map" width="720" height="420" aria-label="Planet route map"></canvas>
+            <canvas id="star-map" width="720" height="420" aria-label="Solar System trade route map"></canvas>
           </div>
 
           <aside class="planet-panel" aria-labelledby="planet-heading">
@@ -69,8 +73,9 @@
                     <th>Resource</th>
                     <th>Price</th>
                     <th>Owned</th>
-                    <th>Quantity</th>
+                    <th>Buy Qty</th>
                     <th>Buy</th>
+                    <th>Sell Qty</th>
                     <th>Sell</th>
                   </tr>
                 </thead>
@@ -99,6 +104,16 @@
         </section>
       </section>
     </main>
+    <dialog id="travel-confirmation" class="travel-dialog" aria-labelledby="travel-confirmation-title">
+      <form method="dialog">
+        <h2 id="travel-confirmation-title">Leave Without Trading?</h2>
+        <p id="travel-confirmation-message"></p>
+        <div class="dialog-actions">
+          <button id="cancel-travel" type="button">Stay</button>
+          <button id="confirm-travel" type="button">Travel</button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>

@@ -11,85 +11,106 @@ export const resources = [
 
 export const planets = [
   {
-    id: "aster",
-    name: "Aster",
-    note: "Industrial starter world",
-    produces: ["fuel", "ore", "electronics"],
-    position: { x: 140, y: 215 },
-    priceRanges: {
-      fuel: { min: 8, max: 12 },
-      ore: { min: 18, max: 26 },
-      water: { min: 44, max: 58 },
-      food: { min: 48, max: 65 },
-      medicine: { min: 94, max: 126 },
-      electronics: { min: 72, max: 96 }
-    }
-  },
-  {
-    id: "brine",
-    name: "Brine",
-    note: "Agricultural and medical supply world",
-    produces: ["water", "food", "medicine"],
-    position: { x: 345, y: 115 },
+    id: "mars",
+    name: "Mars",
+    type: "Planet",
+    note: "Terraforming-era industrial starter world",
+    produces: ["ore", "food", "electronics"],
+    position: { x: 285, y: 235 },
     priceRanges: {
       fuel: { min: 22, max: 32 },
-      ore: { min: 54, max: 72 },
-      water: { min: 11, max: 17 },
-      food: { min: 16, max: 24 },
-      medicine: { min: 42, max: 58 },
-      electronics: { min: 118, max: 154 }
+      ore: { min: 17, max: 25 },
+      water: { min: 48, max: 64 },
+      food: { min: 21, max: 31 },
+      medicine: { min: 92, max: 122 },
+      electronics: { min: 68, max: 90 }
     }
   },
   {
-    id: "cinder",
-    name: "Cinder",
-    note: "Harsh mining and refining world",
-    produces: ["fuel", "ore", "water"],
-    position: { x: 520, y: 260 },
+    id: "europa",
+    name: "Europa",
+    type: "Jovian moon",
+    note: "Ice-ocean biolabs and aquaculture",
+    produces: ["water", "food", "medicine"],
+    position: { x: 425, y: 160 },
+    priceRanges: {
+      fuel: { min: 28, max: 40 },
+      ore: { min: 58, max: 78 },
+      water: { min: 9, max: 15 },
+      food: { min: 18, max: 27 },
+      medicine: { min: 38, max: 54 },
+      electronics: { min: 120, max: 158 }
+    }
+  },
+  {
+    id: "titan",
+    name: "Titan",
+    type: "Saturnian moon",
+    note: "Hydrocarbon refineries and cryogenic research",
+    produces: ["fuel", "medicine", "electronics"],
+    position: { x: 585, y: 310 },
     priceRanges: {
       fuel: { min: 7, max: 11 },
-      ore: { min: 15, max: 23 },
-      water: { min: 22, max: 30 },
-      food: { min: 62, max: 82 },
-      medicine: { min: 104, max: 140 },
-      electronics: { min: 128, max: 166 }
+      ore: { min: 66, max: 88 },
+      water: { min: 52, max: 70 },
+      food: { min: 66, max: 88 },
+      medicine: { min: 44, max: 60 },
+      electronics: { min: 74, max: 98 }
     }
   },
   {
-    id: "helio",
-    name: "Helio",
-    note: "Wealthy trade hub",
-    produces: ["food", "electronics", "medicine"],
-    position: { x: 585, y: 95 },
+    id: "mercury",
+    name: "Mercury",
+    type: "Planet",
+    note: "Solar foundries and metals extraction",
+    produces: ["ore", "fuel", "electronics"],
+    position: { x: 140, y: 190 },
     priceRanges: {
-      fuel: { min: 24, max: 35 },
-      ore: { min: 58, max: 76 },
-      water: { min: 40, max: 54 },
-      food: { min: 19, max: 27 },
-      medicine: { min: 39, max: 54 },
-      electronics: { min: 66, max: 88 }
+      fuel: { min: 10, max: 15 },
+      ore: { min: 14, max: 22 },
+      water: { min: 62, max: 82 },
+      food: { min: 58, max: 76 },
+      medicine: { min: 102, max: 136 },
+      electronics: { min: 62, max: 82 }
     }
   },
   {
-    id: "vesta",
-    name: "Vesta",
-    note: "Frontier supply world",
+    id: "ganymede",
+    name: "Ganymede",
+    type: "Jovian moon",
+    note: "Frontier port and subsurface agriculture",
     produces: ["ore", "water", "food"],
-    position: { x: 235, y: 335 },
+    position: { x: 470, y: 250 },
     priceRanges: {
-      fuel: { min: 18, max: 27 },
-      ore: { min: 17, max: 25 },
-      water: { min: 18, max: 26 },
-      food: { min: 21, max: 31 },
-      medicine: { min: 88, max: 118 },
-      electronics: { min: 110, max: 148 }
+      fuel: { min: 24, max: 34 },
+      ore: { min: 20, max: 28 },
+      water: { min: 16, max: 24 },
+      food: { min: 24, max: 34 },
+      medicine: { min: 86, max: 116 },
+      electronics: { min: 112, max: 150 }
+    }
+  },
+  {
+    id: "luna",
+    name: "Luna",
+    type: "Earth moon",
+    note: "High-orbit manufacturing and medical logistics",
+    produces: ["electronics", "medicine", "fuel"],
+    position: { x: 230, y: 110 },
+    priceRanges: {
+      fuel: { min: 12, max: 18 },
+      ore: { min: 44, max: 60 },
+      water: { min: 38, max: 52 },
+      food: { min: 46, max: 62 },
+      medicine: { min: 40, max: 56 },
+      electronics: { min: 58, max: 78 }
     }
   }
 ];
 
 export const startingPlayer = {
   credits: 1000,
-  currentPlanetId: "aster",
+  currentPlanetId: "mars",
   fuel: 30,
   cargoCapacity: 20
 };

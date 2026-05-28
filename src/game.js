@@ -6,13 +6,15 @@ export const RESOURCE_IDS = resources.map((resource) => resource.id);
 export const PLANET_IDS = planets.map((planet) => planet.id);
 
 export function createInitialState() {
+  const startingPlanet = getPlanet(startingPlayer.currentPlanetId);
   return {
     credits: startingPlayer.credits,
     currentPlanetId: startingPlayer.currentPlanetId,
     fuel: startingPlayer.fuel,
     cargoCapacity: startingPlayer.cargoCapacity,
     cargo: {},
-    messages: ["Docked at Aster. Arbitrage run initialized."]
+    tradedAtCurrentLocation: false,
+    messages: [`Docked at ${startingPlanet.name}. Arbitrage run initialized.`]
   };
 }
 
@@ -98,7 +100,8 @@ export function buyResource(state, resourceId, quantity) {
       {
         ...state,
         credits: state.credits - total,
-        fuel: state.fuel + quantity
+        fuel: state.fuel + quantity,
+        tradedAtCurrentLocation: true
       },
       `Bought ${quantity} ${resource.name} for ${formatNumber(total)} credits.`
     );
@@ -112,6 +115,7 @@ export function buyResource(state, resourceId, quantity) {
     {
       ...state,
       credits: state.credits - total,
+      tradedAtCurrentLocation: true,
       cargo: {
         ...state.cargo,
         [resourceId]: getOwnedQuantity(state, resourceId) + quantity
@@ -148,13 +152,15 @@ export function sellResource(state, resourceId, quantity) {
     {
       ...state,
       credits: state.credits + total,
+      tradedAtCurrentLocation: true,
       cargo: nextCargo
     },
     `Sold ${quantity} ${resource.name} for ${formatNumber(total)} credits.`
   );
 }
 
-export function travelToPlanet(state, destinationPlanetId) {
+export function travelToPlanet(state, destinationPlanetId, options = {}) {
+  const { confirmed = false } = options;
   const destination = getPlanet(destinationPlanetId);
   if (destination.id === state.currentPlanetId) {
     return fail(state, `Already docked at ${destination.name}.`);
@@ -165,20 +171,52 @@ export function travelToPlanet(state, destinationPlanetId) {
     return fail(state, `Need ${cost} fuel to reach ${destination.name}.`);
   }
 
+  if (!state.tradedAtCurrentLocation && !confirmed) {
+    const origin = getPlanet(state.currentPlanetId);
+    const message = `Leave ${origin.name} without trading? Confirm travel to ${destination.name}.`;
+    return {
+      ok: false,
+      requiresConfirmation: true,
+      destinationPlanetId: destination.id,
+      message,
+      state: appendMessage(state, message)
+    };
+  }
+
   return succeed(
     {
       ...state,
       currentPlanetId: destination.id,
-      fuel: state.fuel - cost
+      fuel: state.fuel - cost,
+      tradedAtCurrentLocation: false
     },
     `Traveled to ${destination.name}. Fuel spent: ${cost}.`
   );
 }
 
+export function cancelTravelConfirmation(state, destinationPlanetId) {
+  const destination = getPlanet(destinationPlanetId);
+  return {
+    ok: false,
+    canceled: true,
+    message: `Stayed docked. Travel to ${destination.name} canceled.`,
+    state: appendMessage(state, `Stayed docked. Travel to ${destination.name} canceled.`)
+  };
+}
+
 export function validateMarketData() {
   const errors = [];
+  const allowedLocationNames = new Set(["Mars", "Europa", "Titan", "Mercury", "Ganymede", "Luna"]);
 
   for (const planet of planets) {
+    if (!allowedLocationNames.has(planet.name)) {
+      errors.push(`${planet.name} is not an approved Solar System MVP location.`);
+    }
+
+    if (!planet.type) {
+      errors.push(`${planet.name} must define a Solar System location type.`);
+    }
+
     if (planet.produces.length !== 3) {
       errors.push(`${planet.name} must produce exactly three resources.`);
     }

@@ -1,6 +1,7 @@
 import { planets, resources } from "./data.js";
 import {
   buyResource,
+  cancelTravelConfirmation,
   createInitialState,
   getPlanet,
   sellResource,
@@ -15,12 +16,14 @@ import {
 } from "./uiState.js";
 
 let state = createInitialState();
+let pendingTravel = null;
 
 const elements = {
   credits: document.querySelector("#credits"),
   fuel: document.querySelector("#fuel"),
   cargoSpace: document.querySelector("#cargo-space"),
   currentPlanet: document.querySelector("#current-planet"),
+  tradeStatus: document.querySelector("#trade-status"),
   routeLine: document.querySelector("#route-line"),
   planetHeading: document.querySelector("#planet-heading"),
   planetNote: document.querySelector("#planet-note"),
@@ -32,6 +35,10 @@ const elements = {
   cargoContext: document.querySelector("#cargo-context"),
   messageLog: document.querySelector("#message-log"),
   resetButton: document.querySelector("#reset-button"),
+  travelDialog: document.querySelector("#travel-confirmation"),
+  travelConfirmationMessage: document.querySelector("#travel-confirmation-message"),
+  cancelTravelButton: document.querySelector("#cancel-travel"),
+  confirmTravelButton: document.querySelector("#confirm-travel"),
   canvas: document.querySelector("#star-map")
 };
 
@@ -44,8 +51,33 @@ const stars = Array.from({ length: 90 }, (_, index) => ({
 }));
 
 elements.resetButton.addEventListener("click", () => {
+  pendingTravel = null;
+  closeTravelDialog();
   state = createInitialState();
   render();
+});
+
+elements.cancelTravelButton.addEventListener("click", () => {
+  if (!pendingTravel) {
+    closeTravelDialog();
+    return;
+  }
+
+  applyResult(cancelTravelConfirmation(state, pendingTravel.destinationPlanetId));
+  pendingTravel = null;
+  closeTravelDialog();
+});
+
+elements.confirmTravelButton.addEventListener("click", () => {
+  if (!pendingTravel) {
+    closeTravelDialog();
+    return;
+  }
+
+  const destinationPlanetId = pendingTravel.destinationPlanetId;
+  pendingTravel = null;
+  closeTravelDialog();
+  applyResult(travelToPlanet(state, destinationPlanetId, { confirmed: true }));
 });
 
 function render() {
@@ -63,13 +95,14 @@ function renderStatus() {
   elements.fuel.textContent = status.fuel;
   elements.cargoSpace.textContent = status.cargo;
   elements.currentPlanet.textContent = status.currentPlanet;
+  elements.tradeStatus.textContent = status.tradeStatus;
   elements.routeLine.textContent = status.routeLine;
 }
 
 function renderPlanetPanel() {
   const planet = getPlanet(state.currentPlanetId);
   elements.planetHeading.textContent = planet.name;
-  elements.planetNote.textContent = planet.note;
+  elements.planetNote.textContent = `${planet.type} | ${planet.note}`;
 
   elements.productionList.replaceChildren(
     ...planet.produces.map((resourceId) => {
@@ -87,8 +120,8 @@ function renderPlanetPanel() {
       button.type = "button";
       button.className = "destination-button";
       button.disabled = !destination.canTravel;
-      button.innerHTML = `<span>${destination.name}</span><strong>${destination.fuelCost} fuel</strong>`;
-      button.addEventListener("click", () => applyResult(travelToPlanet(state, destination.id)));
+      button.innerHTML = `<span>${destination.name}<small>${destination.type}</small></span><strong>${destination.fuelCost} fuel</strong>`;
+      button.addEventListener("click", () => handleTravel(destination.id));
       return button;
     })
   );
@@ -100,7 +133,8 @@ function renderMarket() {
 
   const rows = getMarketRows(state).map((row) => {
     const tr = document.createElement("tr");
-    const quantityId = `qty-${row.id}`;
+    const buyQuantityId = `buy-qty-${row.id}`;
+    const sellQuantityId = `sell-qty-${row.id}`;
 
     tr.innerHTML = `
       <td>
@@ -111,17 +145,22 @@ function renderMarket() {
       </td>
       <td>${row.priceLabel}</td>
       <td>${row.owned}</td>
-      <td><input id="${quantityId}" class="quantity-input" type="number" min="1" step="1" value="1" aria-label="${row.name} quantity"></td>
+      <td>${renderSliderMarkup(buyQuantityId, `${row.name} buy quantity`, row.buySlider)}</td>
       <td><button class="trade-button buy" type="button" ${row.canBuyOne ? "" : "disabled"}>Buy</button></td>
+      <td>${renderSliderMarkup(sellQuantityId, `${row.name} sell quantity`, row.sellSlider)}</td>
       <td><button class="trade-button sell" type="button" ${row.canSellOne ? "" : "disabled"}>Sell</button></td>
     `;
 
-    const input = tr.querySelector(`#${quantityId}`);
+    const buyInput = tr.querySelector(`#${buyQuantityId}`);
+    const sellInput = tr.querySelector(`#${sellQuantityId}`);
+    bindSliderLabel(buyInput, tr.querySelector(`[data-slider-label="${buyQuantityId}"]`));
+    bindSliderLabel(sellInput, tr.querySelector(`[data-slider-label="${sellQuantityId}"]`));
+
     tr.querySelector(".buy").addEventListener("click", () => {
-      applyResult(buyResource(state, row.id, getQuantity(input)));
+      applyResult(buyResource(state, row.id, getQuantity(buyInput)));
     });
     tr.querySelector(".sell").addEventListener("click", () => {
-      applyResult(sellResource(state, row.id, getQuantity(input)));
+      applyResult(sellResource(state, row.id, getQuantity(sellInput)));
     });
 
     return tr;
@@ -195,10 +234,54 @@ function drawMap() {
 function applyResult(result) {
   state = result.state;
   render();
+  if (result.requiresConfirmation) {
+    pendingTravel = result;
+    showTravelDialog(result.message);
+  }
 }
 
 function getQuantity(input) {
   return Number.parseInt(input.value, 10);
+}
+
+function handleTravel(destinationPlanetId) {
+  applyResult(travelToPlanet(state, destinationPlanetId));
+}
+
+function renderSliderMarkup(id, label, slider) {
+  return `
+    <div class="quantity-slider">
+      <input id="${id}" type="range" min="${slider.min}" max="${slider.max}" step="1" value="${slider.value}" aria-label="${label}" ${slider.disabled ? "disabled" : ""}>
+      <output data-slider-label="${id}" for="${id}">${slider.label}</output>
+    </div>
+  `;
+}
+
+function bindSliderLabel(input, label) {
+  if (!input || !label) {
+    return;
+  }
+
+  input.addEventListener("input", () => {
+    label.textContent = input.value;
+  });
+}
+
+function showTravelDialog(message) {
+  elements.travelConfirmationMessage.textContent = message;
+  if (typeof elements.travelDialog.showModal === "function") {
+    elements.travelDialog.showModal();
+  } else if (window.confirm(message)) {
+    elements.confirmTravelButton.click();
+  } else {
+    elements.cancelTravelButton.click();
+  }
+}
+
+function closeTravelDialog() {
+  if (elements.travelDialog.open) {
+    elements.travelDialog.close();
+  }
 }
 
 render();

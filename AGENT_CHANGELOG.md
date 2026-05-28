@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 13:05 CDT - Codex - feature/codex/solar-system-trading-mvp
+
+- Status: ready-for-review
+- Summary: Implementing requested Solar System trading MVP changes: real Solar System trade locations, travel confirmation before leaving untraded locations, and slider-based multi-unit buy/sell controls.
+- Files changed: `README.md`, `index.html`, `package.json`, `src/app.js`, `src/data.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4174` returned `200 OK`; `curl -I http://127.0.0.1:4174/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-solar-build` on branch `feature/codex/solar-system-trading-mvp`. Local server started on port `4174` for human UI testing. Another active agent is working in `/tmp/spacetrader-claude-combat-plan`; do not touch or overwrite that work. UI must be human tested and explicitly approved before completion.
+
 ## 2026-05-28 13:00 CDT - Codex - feature/codex/solar-system-trading-prep
 
 - Status: ready-for-review

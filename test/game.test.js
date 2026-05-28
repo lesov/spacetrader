@@ -20,6 +20,8 @@ import {
   formatFuel,
   getDestinationRows,
   getMarketRows,
+  getPlanetMapView,
+  getProjectedMapView,
   getStatusView
 } from "../src/uiState.js";
 
@@ -338,6 +340,24 @@ test("destination rows expose confirmation state for untraded locations", () => 
 
   const tradedState = buyResource(state, "metals", 1).state;
   assert.equal(getDestinationRows(tradedState).every((row) => row.requiresConfirmation === false), true);
+});
+
+test("map projection keeps all trade locations visible in desktop and mobile viewports", () => {
+  const mapPlanets = getPlanetMapView(createInitialState());
+  const viewports = [
+    { width: 900, height: 420 },
+    { width: 320, height: 280 }
+  ];
+
+  for (const viewport of viewports) {
+    const projected = getProjectedMapView(mapPlanets, viewport.width, viewport.height);
+    for (const planet of projected) {
+      assert.ok(planet.x >= 24, `${planet.name} left edge in ${viewport.width}px`);
+      assert.ok(planet.x <= viewport.width - 64, `${planet.name} right label room in ${viewport.width}px`);
+      assert.ok(planet.y >= 24, `${planet.name} top edge in ${viewport.height}px`);
+      assert.ok(planet.y <= viewport.height - 28, `${planet.name} bottom edge in ${viewport.height}px`);
+    }
+  }
 });
 
 test("messages are generated for successful and failed actions", () => {

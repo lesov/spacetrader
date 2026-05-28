@@ -1,4 +1,4 @@
-import { planets, resources } from "./data.js";
+import { resources } from "./data.js";
 import {
   buyResource,
   cancelTravelConfirmation,
@@ -12,6 +12,7 @@ import {
   getDestinationRows,
   getMarketRows,
   getPlanetMapView,
+  getProjectedMapView,
   getStatusView
 } from "./uiState.js";
 
@@ -49,8 +50,8 @@ const elements = {
 
 const ctx = elements.canvas.getContext("2d");
 const stars = Array.from({ length: 90 }, (_, index) => ({
-  x: (index * 67) % elements.canvas.width,
-  y: (index * 37) % elements.canvas.height,
+  x: ((index * 67) % 720) / 720,
+  y: ((index * 37) % 420) / 420,
   radius: 0.7 + (index % 3) * 0.35,
   drift: 0.08 + (index % 5) * 0.015
 }));
@@ -202,27 +203,27 @@ function renderLog() {
 }
 
 function drawMap() {
-  const { width, height } = elements.canvas;
+  const { width, height } = resizeMapCanvas();
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#07080d";
   ctx.fillRect(0, 0, width, height);
 
   for (const star of stars) {
-    star.x = (star.x + star.drift) % width;
+    star.x = (star.x + star.drift / width) % 1;
     ctx.beginPath();
-    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+    ctx.arc(star.x * width, star.y * height, star.radius, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(234, 241, 255, 0.72)";
     ctx.fill();
   }
 
-  const mapPlanets = getPlanetMapView(state);
+  const mapPlanets = getProjectedMapView(getPlanetMapView(state), width, height);
   ctx.strokeStyle = "rgba(104, 211, 145, 0.22)";
   ctx.lineWidth = 1;
-  for (let i = 0; i < planets.length; i += 1) {
-    for (let j = i + 1; j < planets.length; j += 1) {
+  for (let i = 0; i < mapPlanets.length; i += 1) {
+    for (let j = i + 1; j < mapPlanets.length; j += 1) {
       ctx.beginPath();
-      ctx.moveTo(planets[i].position.x, planets[i].position.y);
-      ctx.lineTo(planets[j].position.x, planets[j].position.y);
+      ctx.moveTo(mapPlanets[i].x, mapPlanets[i].y);
+      ctx.lineTo(mapPlanets[j].x, mapPlanets[j].y);
       ctx.stroke();
     }
   }
@@ -306,5 +307,23 @@ function getRiskColor(riskLevel) {
   return "#6ad3d1";
 }
 
+function resizeMapCanvas() {
+  const bounds = elements.canvas.getBoundingClientRect();
+  const width = Math.max(320, Math.round(bounds.width));
+  const height = Math.max(280, Math.round(bounds.height));
+  const pixelRatio = window.devicePixelRatio || 1;
+  const scaledWidth = Math.round(width * pixelRatio);
+  const scaledHeight = Math.round(height * pixelRatio);
+
+  if (elements.canvas.width !== scaledWidth || elements.canvas.height !== scaledHeight) {
+    elements.canvas.width = scaledWidth;
+    elements.canvas.height = scaledHeight;
+  }
+
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  return { width, height };
+}
+
 render();
+window.addEventListener("resize", drawMap);
 setInterval(drawMap, 60);

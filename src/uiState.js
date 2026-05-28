@@ -105,6 +105,26 @@ export function getPlanetMapView(state) {
   }));
 }
 
+export function getProjectedMapView(mapPlanets, width, height) {
+  const padding = getMapPadding(width, height);
+  const bounds = getMapBounds(mapPlanets);
+  const drawableWidth = Math.max(1, width - padding.left - padding.right);
+  const drawableHeight = Math.max(1, height - padding.top - padding.bottom);
+  const sourceWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const sourceHeight = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = Math.min(drawableWidth / sourceWidth, drawableHeight / sourceHeight);
+  const renderedWidth = sourceWidth * scale;
+  const renderedHeight = sourceHeight * scale;
+  const offsetX = padding.left + (drawableWidth - renderedWidth) / 2;
+  const offsetY = padding.top + (drawableHeight - renderedHeight) / 2;
+
+  return mapPlanets.map((planet) => ({
+    ...planet,
+    x: offsetX + (planet.x - bounds.minX) * scale,
+    y: offsetY + (planet.y - bounds.minY) * scale
+  }));
+}
+
 function getSliderView(max) {
   return {
     min: max > 0 ? 1 : 0,
@@ -112,5 +132,31 @@ function getSliderView(max) {
     value: max > 0 ? 1 : 0,
     disabled: max <= 0,
     label: max > 0 ? "1" : "0"
+  };
+}
+
+function getMapBounds(mapPlanets) {
+  return mapPlanets.reduce(
+    (bounds, planet) => ({
+      minX: Math.min(bounds.minX, planet.x),
+      maxX: Math.max(bounds.maxX, planet.x),
+      minY: Math.min(bounds.minY, planet.y),
+      maxY: Math.max(bounds.maxY, planet.y)
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY
+    }
+  );
+}
+
+function getMapPadding(width, height) {
+  return {
+    left: Math.min(54, Math.max(28, width * 0.08)),
+    right: Math.min(118, Math.max(72, width * 0.15)),
+    top: Math.min(48, Math.max(28, height * 0.1)),
+    bottom: Math.min(54, Math.max(34, height * 0.12))
   };
 }

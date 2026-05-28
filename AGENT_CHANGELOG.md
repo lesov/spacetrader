@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 12:42 CDT - Codex - feature/codex/local-space-trader-mvp
+
+- Status: ready-for-review
+- Summary: Building the local browser MVP from `MVP_EXECUTION_PLAN.md`, including deterministic planet/resource data, pure game rules, automated regression tests, and a playable single-screen web UI.
+- Files changed: `README.md`, `package.json`, `index.html`, `src/data.js`, `src/game.js`, `src/uiState.js`, `src/app.js`, `src/styles.css`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4173` returned `200 OK`; `curl -I http://127.0.0.1:4173/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-mvp-build` on branch `feature/codex/local-space-trader-mvp`. Local server started on port `4173` for human UI testing. UI must be human tested and explicitly approved before completion.
+
 ## 2026-05-28 12:40 CDT - Codex - docs/codex/mvp-execution-plan
 
 - Status: ready-for-review

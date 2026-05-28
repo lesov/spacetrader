@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Space Trader Local MVP</title>
+    <link rel="stylesheet" href="./src/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="command-surface" aria-label="Space Trader">
+        <header class="topbar">
+          <div>
+            <h1>Space Trader</h1>
+            <p id="route-line" class="route-line"></p>
+          </div>
+          <dl class="status-grid" aria-label="Ship status">
+            <div>
+              <dt>Credits</dt>
+              <dd id="credits"></dd>
+            </div>
+            <div>
+              <dt>Fuel</dt>
+              <dd id="fuel"></dd>
+            </div>
+            <div>
+              <dt>Cargo</dt>
+              <dd id="cargo-space"></dd>
+            </div>
+            <div>
+              <dt>Planet</dt>
+              <dd id="current-planet"></dd>
+            </div>
+          </dl>
+        </header>
+
+        <section class="flight-deck">
+          <div class="map-panel">
+            <canvas id="star-map" width="720" height="420" aria-label="Planet route map"></canvas>
+          </div>
+
+          <aside class="planet-panel" aria-labelledby="planet-heading">
+            <div>
+              <p class="eyebrow">Current Market</p>
+              <h2 id="planet-heading"></h2>
+              <p id="planet-note" class="planet-note"></p>
+            </div>
+            <div>
+              <h3>Production</h3>
+              <div id="production-list" class="chip-row"></div>
+            </div>
+            <div>
+              <h3>Destinations</h3>
+              <div id="destinations" class="destination-list"></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="trade-layout">
+          <section class="market-panel" aria-labelledby="market-heading">
+            <div class="section-heading">
+              <h2 id="market-heading">Market</h2>
+              <span id="market-context"></span>
+            </div>
+            <div class="market-table-wrap">
+              <table class="market-table">
+                <thead>
+                  <tr>
+                    <th>Resource</th>
+                    <th>Price</th>
+                    <th>Owned</th>
+                    <th>Quantity</th>
+                    <th>Buy</th>
+                    <th>Sell</th>
+                  </tr>
+                </thead>
+                <tbody id="market-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <aside class="side-stack">
+            <section class="cargo-panel" aria-labelledby="cargo-heading">
+              <div class="section-heading">
+                <h2 id="cargo-heading">Cargo</h2>
+                <span id="cargo-context"></span>
+              </div>
+              <div id="cargo-list" class="cargo-list"></div>
+            </section>
+
+            <section class="log-panel" aria-labelledby="log-heading">
+              <div class="section-heading">
+                <h2 id="log-heading">Log</h2>
+                <button id="reset-button" type="button">Reset</button>
+              </div>
+              <ol id="message-log" class="message-log"></ol>
+            </section>
+          </aside>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

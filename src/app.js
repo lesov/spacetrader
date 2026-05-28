@@ -8,8 +8,10 @@ import {
   travelToPlanet
 } from "./game.js";
 import {
+  MAP_MARKER_COLORS,
   getCargoRows,
   getDestinationRows,
+  getMapLegendRows,
   getMarketRows,
   getPlanetMapView,
   getProjectedMapView,
@@ -35,6 +37,7 @@ const elements = {
   strategicContext: document.querySelector("#strategic-context"),
   productionList: document.querySelector("#production-list"),
   destinations: document.querySelector("#destinations"),
+  mapLegend: document.querySelector("#map-legend"),
   marketBody: document.querySelector("#market-body"),
   marketContext: document.querySelector("#market-context"),
   cargoList: document.querySelector("#cargo-list"),
@@ -89,6 +92,7 @@ elements.confirmTravelButton.addEventListener("click", () => {
 function render() {
   renderStatus();
   renderPlanetPanel();
+  renderMapLegend();
   renderMarket();
   renderCargo();
   renderLog();
@@ -231,9 +235,9 @@ function drawMap() {
   for (const planet of mapPlanets) {
     ctx.beginPath();
     ctx.arc(planet.x, planet.y, planet.active ? 14 : 10, 0, Math.PI * 2);
-    const markerColor = planet.active ? "#f7b955" : getRiskColor(planet.riskLevel);
+    const markerColor = planet.active ? MAP_MARKER_COLORS.current : getRiskColor(planet.riskLevel);
     ctx.fillStyle = markerColor;
-    ctx.shadowColor = markerColor;
+    ctx.shadowColor = planet.active ? MAP_MARKER_COLORS.moderate : markerColor;
     ctx.shadowBlur = planet.active ? 18 : 8;
     ctx.fill();
     ctx.shadowBlur = 0;
@@ -270,6 +274,18 @@ function renderSliderMarkup(id, label, slider) {
   `;
 }
 
+function renderMapLegend() {
+  elements.mapLegend.replaceChildren(
+    ...getMapLegendRows().map((row) => {
+      const item = document.createElement("div");
+      item.className = "map-legend-item";
+      item.innerHTML = `<span class="map-swatch" aria-hidden="true"></span><span>${row.label}</span>`;
+      item.querySelector(".map-swatch").style.backgroundColor = row.color;
+      return item;
+    })
+  );
+}
+
 function bindSliderLabel(input, label) {
   if (!input || !label) {
     return;
@@ -299,12 +315,12 @@ function closeTravelDialog() {
 
 function getRiskColor(riskLevel) {
   if (riskLevel === "high") {
-    return "#f06d6d";
+    return MAP_MARKER_COLORS.high;
   }
   if (riskLevel === "moderate") {
-    return "#f7b955";
+    return MAP_MARKER_COLORS.moderate;
   }
-  return "#6ad3d1";
+  return MAP_MARKER_COLORS.low;
 }
 
 function resizeMapCanvas() {

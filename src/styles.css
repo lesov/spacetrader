@@ -164,6 +164,7 @@ h3 {
 }
 
 .map-panel {
+  position: relative;
   height: clamp(360px, 42vw, 520px);
   min-height: 0;
   border: 1px solid var(--line);
@@ -176,6 +177,47 @@ h3 {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.map-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: min(210px, calc(100% - 24px));
+  padding: 10px;
+  border: 1px solid rgba(244, 240, 232, 0.18);
+  border-radius: 6px;
+  background: rgba(7, 8, 13, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.map-legend h3 {
+  margin-bottom: 7px;
+}
+
+.map-legend-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.map-swatch {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1px solid rgba(244, 240, 232, 0.42);
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
 }
 
 .planet-panel {

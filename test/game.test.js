@@ -19,6 +19,7 @@ import {
   formatCredits,
   formatFuel,
   getDestinationRows,
+  getMapLegendRows,
   getMarketRows,
   getPlanetMapView,
   getProjectedMapView,
@@ -358,6 +359,14 @@ test("map projection keeps all trade locations visible in desktop and mobile vie
       assert.ok(planet.y <= viewport.height - 28, `${planet.name} bottom edge in ${viewport.height}px`);
     }
   }
+});
+
+test("map legend explains current location and destination risk colors", () => {
+  assert.deepEqual(
+    getMapLegendRows().map((row) => row.label),
+    ["Current location", "Low risk", "Moderate risk", "High risk"]
+  );
+  assert.equal(getMapLegendRows().every((row) => /^#[0-9a-f]{6}$/i.test(row.color)), true);
 });
 
 test("messages are generated for successful and failed actions", () => {

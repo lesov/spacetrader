@@ -14,6 +14,13 @@ import {
   getTravelCost
 } from "./game.js";
 
+export const MAP_MARKER_COLORS = {
+  current: "#f4f0e8",
+  low: "#6ad3d1",
+  moderate: "#f7b955",
+  high: "#f06d6d"
+};
+
 export function formatCredits(value) {
   return `${new Intl.NumberFormat("en-US").format(value)} cr`;
 }
@@ -123,6 +130,15 @@ export function getProjectedMapView(mapPlanets, width, height) {
     x: offsetX + (planet.x - bounds.minX) * scale,
     y: offsetY + (planet.y - bounds.minY) * scale
   }));
+}
+
+export function getMapLegendRows() {
+  return [
+    { id: "current", label: "Current location", color: MAP_MARKER_COLORS.current },
+    { id: "low", label: "Low risk", color: MAP_MARKER_COLORS.low },
+    { id: "moderate", label: "Moderate risk", color: MAP_MARKER_COLORS.moderate },
+    { id: "high", label: "High risk", color: MAP_MARKER_COLORS.high }
+  ];
 }
 
 function getSliderView(max) {

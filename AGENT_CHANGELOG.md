@@ -1,5 +1,86 @@
 # Agent Changelog
 
+## 2026-05-28 18:15 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: approved
+- Summary: Human approved the 2175 context integration UI and explicitly authorized commit, merge to `main`, push, tag as `context_v1`, and push the tag.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Approval/logging update only; previous verification for this branch passed with `npm test`, JS syntax checks, and server checks.
+- UI review: approved-by-human
+- Blockers or coordination notes: Proceeding with merge to `main` and tag `context_v1` per human authorization.
+
+## 2026-05-28 18:11 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Fixed battle mode not visibly appearing after encounters by enforcing `[hidden] { display: none !important; }`, preventing explicit grid/flex display styles from overriding mode visibility.
+- Files changed: `src/styles.css`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/travelCombat.js` passed; `curl -I http://127.0.0.1:4175/src/styles.css` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`.
+
+## 2026-05-28 18:10 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Rechecked and tuned battle encounter odds so fights are more noticeable while still based on route distance, destination risk, and a random roll rather than guaranteed high-risk combat.
+- Files changed: `src/travelCombat.js`, `test/travelCombat.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/travelCombat.js` passed; `node --check src/app.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/travelCombat.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`.
+
+## 2026-05-28 18:02 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Fixed battle mode not triggering by integrating travel combat into the 2175 branch and tying encounter chance to route distance, destination risk, and a random roll.
+- Files changed: `README.md`, `index.html`, `src/app.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `src/travelCombat.js`, `src/combat/ai.js`, `src/combat/data.js`, `src/combat/rng.js`, `src/combat/rules.js`, `src/combat/styles.css`, `src/combat/uiState.js`, `test/combat.test.js`, `test/travelCombat.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/game.js` passed; `node --check src/travelCombat.js` passed; `node --check src/uiState.js` passed; `node --check src/combat/ai.js` passed; `node --check src/combat/rules.js` passed; `node --check src/combat/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
+## 2026-05-28 17:54 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Added campaign date advancement so successful travel moves the date forward by one week per route fuel unit, with date display and destination duration labels.
+- Files changed: `index.html`, `src/app.js`, `src/data.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
+## 2026-05-28 17:50 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Moved the Solar System map legend out of the canvas overlay into a horizontal bar below the map so it does not block markers or labels.
+- Files changed: `index.html`, `src/styles.css`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
+## 2026-05-28 17:48 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Added a visible Solar System map legend that explains marker colors for the current location and risk-coded destinations, with current-location color separated from moderate-risk color.
+- Files changed: `index.html`, `src/app.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
+## 2026-05-28 17:45 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Fixed the Solar System map rendering so the canvas uses its displayed size, the map has a stable responsive panel height, and all trade locations are projected into a padded visible viewport.
+- Files changed: `src/app.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/uiState.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Browser automation was not available locally, so final visual confirmation still needs human UI review at `http://127.0.0.1:4175`.
+
+## 2026-05-28 17:39 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Integrated the 2175 campaign-start setting from `Humanity_in_2225.txt` and hidden design context from `HIDDEN_CONTEXT_Real_World_Mapping.txt` into the existing trading MVP without exposing the hidden mapping to players.
+- Files changed: `README.md`, `index.html`, `src/app.js`, `src/data.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-2175-context`; hidden context remains non-player-facing. Local server is running on port `4175` because port `4174` was already occupied. Human UI testing and approval are still required before completion or merge.
+
 ## 2026-05-28 13:05 CDT - Codex - feature/codex/solar-system-trading-mvp
 
 - Status: merged

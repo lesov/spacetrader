@@ -1,34 +1,75 @@
-import { planets, resources } from "./data.js";
+import { resources } from "./data.js";
 import {
   buyResource,
   cancelTravelConfirmation,
   createInitialState,
   getPlanet,
-  sellResource,
-  travelToPlanet
+  sellResource
 } from "./game.js";
 import {
+  beginTravel,
+  prepareCombatActionPhase,
+  resolveIntegratedBattleTurn,
+  setPlayerAllocation,
+  updatePlayerAllocation
+} from "./travelCombat.js";
+import {
+  MAP_MARKER_COLORS,
   getCargoRows,
   getDestinationRows,
+  getMapLegendRows,
   getMarketRows,
   getPlanetMapView,
+  getProjectedMapView,
   getStatusView
 } from "./uiState.js";
+import { createRng } from "./combat/rng.js";
+import { runAwayChance } from "./combat/rules.js";
+import {
+  SYSTEMS,
+  SYSTEM_LABELS,
+  PRESETS,
+  allocationRemaining,
+  battleResultLabel,
+  computePresetAllocation,
+  formatBar,
+  formatHull,
+  formatShield,
+  getWeaponRows,
+  isAllocationValid,
+  phaseLabel,
+  systemTooltip
+} from "./combat/uiState.js";
 
 let state = createInitialState();
+let rng = createRng(Date.now());
 let pendingTravel = null;
 
 const elements = {
+  tradeTopbar: document.querySelector("#trade-topbar"),
+  tradeFlightDeck: document.querySelector("#trade-flight-deck"),
+  tradeLayout: document.querySelector("#trade-layout"),
+  combatMode: document.querySelector("#combat-mode"),
+  gameOverPanel: document.querySelector("#game-over-panel"),
+  gameOverMessage: document.querySelector("#game-over-message"),
+  gameOverReset: document.querySelector("#game-over-reset"),
+  campaignLabel: document.querySelector("#campaign-label"),
+  marketClimate: document.querySelector("#market-climate"),
   credits: document.querySelector("#credits"),
   fuel: document.querySelector("#fuel"),
   cargoSpace: document.querySelector("#cargo-space"),
+  currentDate: document.querySelector("#current-date"),
   currentPlanet: document.querySelector("#current-planet"),
   tradeStatus: document.querySelector("#trade-status"),
   routeLine: document.querySelector("#route-line"),
   planetHeading: document.querySelector("#planet-heading"),
   planetNote: document.querySelector("#planet-note"),
+  locationAlignment: document.querySelector("#location-alignment"),
+  locationRisk: document.querySelector("#location-risk"),
+  strategicContext: document.querySelector("#strategic-context"),
   productionList: document.querySelector("#production-list"),
   destinations: document.querySelector("#destinations"),
+  mapLegend: document.querySelector("#map-legend"),
   marketBody: document.querySelector("#market-body"),
   marketContext: document.querySelector("#market-context"),
   cargoList: document.querySelector("#cargo-list"),
@@ -39,23 +80,52 @@ const elements = {
   travelConfirmationMessage: document.querySelector("#travel-confirmation-message"),
   cancelTravelButton: document.querySelector("#cancel-travel"),
   confirmTravelButton: document.querySelector("#confirm-travel"),
-  canvas: document.querySelector("#star-map")
+  canvas: document.querySelector("#star-map"),
+  playerName: document.querySelector("#player-name"),
+  playerHull: document.querySelector("#player-hull"),
+  playerHullBar: document.querySelector("#player-hull-bar"),
+  playerShield: document.querySelector("#player-shield"),
+  playerShieldBar: document.querySelector("#player-shield-bar"),
+  playerPower: document.querySelector("#player-power"),
+  enemyName: document.querySelector("#enemy-name"),
+  enemyHull: document.querySelector("#enemy-hull"),
+  enemyHullBar: document.querySelector("#enemy-hull-bar"),
+  enemyShield: document.querySelector("#enemy-shield"),
+  enemyShieldBar: document.querySelector("#enemy-shield-bar"),
+  turnNumber: document.querySelector("#turn-number"),
+  phaseLabel: document.querySelector("#phase-label"),
+  allocationPanel: document.querySelector("#allocation-panel"),
+  presetRow: document.querySelector("#preset-row"),
+  allocationGrid: document.querySelector("#allocation-grid"),
+  powerRemaining: document.querySelector("#power-remaining"),
+  powerRemainingWrap: document.querySelector("#power-remaining-wrap"),
+  endAllocation: document.querySelector("#end-allocation"),
+  actionPanel: document.querySelector("#action-panel"),
+  actionButtons: document.querySelector("#action-buttons"),
+  battleEndPanel: document.querySelector("#battle-end-panel"),
+  resultHeading: document.querySelector("#result-heading"),
+  resultSubtext: document.querySelector("#result-subtext"),
+  combatLog: document.querySelector("#combat-log")
 };
 
 const ctx = elements.canvas.getContext("2d");
 const stars = Array.from({ length: 90 }, (_, index) => ({
-  x: (index * 67) % elements.canvas.width,
-  y: (index * 37) % elements.canvas.height,
+  x: ((index * 67) % 720) / 720,
+  y: ((index * 37) % 420) / 420,
   radius: 0.7 + (index % 3) * 0.35,
   drift: 0.08 + (index % 5) * 0.015
 }));
 
-elements.resetButton.addEventListener("click", () => {
+elements.resetButton.addEventListener("click", resetRun);
+elements.gameOverReset.addEventListener("click", resetRun);
+
+function resetRun() {
   pendingTravel = null;
   closeTravelDialog();
+  rng = createRng(Date.now());
   state = createInitialState();
   render();
-});
+}
 
 elements.cancelTravelButton.addEventListener("click", () => {
   if (!pendingTravel) {
@@ -77,12 +147,39 @@ elements.confirmTravelButton.addEventListener("click", () => {
   const destinationPlanetId = pendingTravel.destinationPlanetId;
   pendingTravel = null;
   closeTravelDialog();
-  applyResult(travelToPlanet(state, destinationPlanetId, { confirmed: true }));
+  applyResult(beginTravel(state, destinationPlanetId, { confirmed: true }, rng));
+});
+
+elements.endAllocation.addEventListener("click", () => {
+  applyResult(prepareCombatActionPhase(state, rng));
 });
 
 function render() {
+  renderMode();
+  if (state.mode === "combat") {
+    renderCombat();
+    return;
+  }
+  if (state.mode === "gameOver") {
+    renderGameOver();
+    return;
+  }
+  renderTrade();
+}
+
+function renderMode() {
+  const tradeVisible = state.mode === "trade";
+  elements.tradeTopbar.hidden = !tradeVisible;
+  elements.tradeFlightDeck.hidden = !tradeVisible;
+  elements.tradeLayout.hidden = !tradeVisible;
+  elements.combatMode.hidden = state.mode !== "combat";
+  elements.gameOverPanel.hidden = state.mode !== "gameOver";
+}
+
+function renderTrade() {
   renderStatus();
   renderPlanetPanel();
+  renderMapLegend();
   renderMarket();
   renderCargo();
   renderLog();
@@ -91,9 +188,12 @@ function render() {
 
 function renderStatus() {
   const status = getStatusView(state);
+  elements.campaignLabel.textContent = status.campaignLabel;
+  elements.marketClimate.textContent = status.marketClimate;
   elements.credits.textContent = status.credits;
   elements.fuel.textContent = status.fuel;
   elements.cargoSpace.textContent = status.cargo;
+  elements.currentDate.textContent = status.currentDate;
   elements.currentPlanet.textContent = status.currentPlanet;
   elements.tradeStatus.textContent = status.tradeStatus;
   elements.routeLine.textContent = status.routeLine;
@@ -102,7 +202,11 @@ function renderStatus() {
 function renderPlanetPanel() {
   const planet = getPlanet(state.currentPlanetId);
   elements.planetHeading.textContent = planet.name;
-  elements.planetNote.textContent = `${planet.type} | ${planet.note}`;
+  elements.planetNote.textContent = `${planet.type} | ${planet.summary}`;
+  elements.locationAlignment.textContent = planet.factionAlignment;
+  elements.locationRisk.textContent = `${planet.riskLevel} risk`;
+  elements.locationRisk.dataset.risk = planet.riskLevel;
+  elements.strategicContext.textContent = planet.strategicContext;
 
   elements.productionList.replaceChildren(
     ...planet.produces.map((resourceId) => {
@@ -120,7 +224,7 @@ function renderPlanetPanel() {
       button.type = "button";
       button.className = "destination-button";
       button.disabled = !destination.canTravel;
-      button.innerHTML = `<span>${destination.name}<small>${destination.type}</small></span><strong>${destination.fuelCost} fuel</strong>`;
+      button.innerHTML = `<span>${destination.name}<small>${destination.type} | ${destination.factionAlignment} | ${destination.riskLevel} risk | ${destination.encounterRiskLabel}</small></span><strong>${destination.fuelCost} fuel | ${destination.travelDurationLabel}</strong>`;
       button.addEventListener("click", () => handleTravel(destination.id));
       return button;
     })
@@ -190,28 +294,174 @@ function renderLog() {
   );
 }
 
+function renderCombat() {
+  const battle = state.combat.battle;
+  const { player, enemy, turn, phase, winner, log } = battle;
+
+  elements.playerName.textContent = player.label;
+  elements.playerHull.textContent = formatHull(player.hull, player.hullMax);
+  elements.playerHullBar.textContent = formatBar(player.hull, player.hullMax);
+  elements.playerShield.textContent = formatShield(player.shield, player.shieldMax);
+  elements.playerShieldBar.textContent = formatBar(player.shield, player.shieldMax);
+  elements.playerPower.textContent = player.powerCapacity;
+
+  elements.enemyName.textContent = enemy.label;
+  elements.enemyHull.textContent = formatHull(enemy.hull, enemy.hullMax);
+  elements.enemyHullBar.textContent = formatBar(enemy.hull, enemy.hullMax);
+  elements.enemyShield.textContent = formatShield(enemy.shield, enemy.shieldMax);
+  elements.enemyShieldBar.textContent = formatBar(enemy.shield, enemy.shieldMax);
+
+  elements.turnNumber.textContent = turn;
+  elements.phaseLabel.textContent = phaseLabel(phase);
+
+  elements.allocationPanel.hidden = phase !== "allocate";
+  elements.actionPanel.hidden = phase !== "action";
+  elements.battleEndPanel.hidden = phase !== "ended";
+
+  if (phase === "allocate") {
+    renderAllocation(player);
+  } else if (phase === "action") {
+    renderActions(player);
+  } else if (phase === "ended") {
+    renderBattleEnd(winner);
+  }
+
+  elements.combatLog.replaceChildren(
+    ...log.map((entry) => {
+      const item = document.createElement("li");
+      item.textContent = entry;
+      return item;
+    })
+  );
+}
+
+function renderAllocation(player) {
+  const remaining = allocationRemaining(player);
+  const hullFull = player.hull >= player.hullMax;
+
+  elements.powerRemaining.textContent = remaining;
+  elements.powerRemainingWrap.className = `power-remaining${remaining < 0 ? " over" : ""}`;
+  elements.endAllocation.disabled = !isAllocationValid(player);
+
+  elements.presetRow.replaceChildren(
+    ...PRESETS.map((preset) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "preset-btn";
+      button.textContent = preset.label;
+      button.addEventListener("click", () => handleCombatPreset(preset.weights));
+      return button;
+    })
+  );
+
+  elements.allocationGrid.replaceChildren(
+    ...SYSTEMS.map((system) => {
+      const repairDisabled = system === "repair" && hullFull;
+      const cell = document.createElement("div");
+      cell.className = `alloc-cell has-tip${repairDisabled ? " repair-disabled" : ""}`;
+      cell.setAttribute("data-tip", systemTooltip(system, player));
+
+      const label = document.createElement("div");
+      label.className = "alloc-label";
+      label.textContent = SYSTEM_LABELS[system];
+
+      const controls = document.createElement("div");
+      controls.className = "alloc-controls";
+
+      const minusButton = document.createElement("button");
+      minusButton.type = "button";
+      minusButton.className = "alloc-btn";
+      minusButton.textContent = "-";
+      minusButton.disabled = player.allocation[system] <= 0 || repairDisabled;
+      minusButton.addEventListener("click", () => {
+        state = updatePlayerAllocation(state, system, -1);
+        render();
+      });
+
+      const value = document.createElement("span");
+      value.className = "alloc-value";
+      value.textContent = player.allocation[system];
+
+      const plusButton = document.createElement("button");
+      plusButton.type = "button";
+      plusButton.className = "alloc-btn";
+      plusButton.textContent = "+";
+      plusButton.disabled = remaining <= 0 || repairDisabled;
+      plusButton.addEventListener("click", () => {
+        state = updatePlayerAllocation(state, system, 1);
+        render();
+      });
+
+      controls.append(minusButton, value, plusButton);
+      cell.append(label, controls);
+      return cell;
+    })
+  );
+}
+
+function renderActions(player) {
+  const actionButtons = getWeaponRows(player).map((row) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "action-btn weapon";
+    button.disabled = !row.available;
+    button.innerHTML = `<span>Fire ${row.name}</span><span class="weapon-note">${row.available && row.ammo !== null ? `${row.ammo} remaining` : row.reason}</span>`;
+    button.addEventListener("click", () => handleCombatAction({ type: "fire", weaponId: row.id }));
+    return button;
+  });
+
+  actionButtons.push(makeActionButton("Brace", "brace", { type: "brace" }, "Apply shield regen a second time this turn."));
+  actionButtons.push(makeActionButton("Hold", "hold", { type: "hold" }, "Take no action this turn."));
+
+  const chance = Math.round(runAwayChance(player) * 100);
+  const runButton = document.createElement("button");
+  runButton.type = "button";
+  runButton.className = "action-btn run";
+  runButton.innerHTML = `<span>Run Away</span><span class="weapon-note">${chance}% success</span>`;
+  runButton.title = "Escape chance: engines x 12% + sensors x 5%. Enemy may still fire.";
+  runButton.addEventListener("click", () => handleCombatAction({ type: "run" }));
+  actionButtons.push(runButton);
+
+  elements.actionButtons.replaceChildren(...actionButtons);
+}
+
+function renderBattleEnd(winner) {
+  const label = battleResultLabel(winner);
+  elements.resultHeading.textContent = label;
+  elements.resultHeading.className = `result-heading ${winner}`;
+  elements.resultSubtext.textContent =
+    winner === "player" ? "The route is clear. Salvage has been recovered." :
+    winner === "enemy" ? "Your hull gives out before reaching port." :
+    winner === "draw" ? "Mutual destruction ends the run." :
+    winner === "escaped" ? "You jump clear and continue toward port." : "";
+}
+
+function renderGameOver() {
+  elements.gameOverMessage.textContent = state.messages[0] ?? "Your run has ended.";
+}
+
 function drawMap() {
-  const { width, height } = elements.canvas;
+  const { width, height } = resizeMapCanvas();
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#07080d";
   ctx.fillRect(0, 0, width, height);
 
   for (const star of stars) {
-    star.x = (star.x + star.drift) % width;
+    star.x = (star.x + star.drift / width) % 1;
     ctx.beginPath();
-    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+    ctx.arc(star.x * width, star.y * height, star.radius, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(234, 241, 255, 0.72)";
     ctx.fill();
   }
 
-  const mapPlanets = getPlanetMapView(state);
+  const mapPlanets = getProjectedMapView(getPlanetMapView(state), width, height);
   ctx.strokeStyle = "rgba(104, 211, 145, 0.22)";
   ctx.lineWidth = 1;
-  for (let i = 0; i < planets.length; i += 1) {
-    for (let j = i + 1; j < planets.length; j += 1) {
+  for (let i = 0; i < mapPlanets.length; i += 1) {
+    for (let j = i + 1; j < mapPlanets.length; j += 1) {
       ctx.beginPath();
-      ctx.moveTo(planets[i].position.x, planets[i].position.y);
-      ctx.lineTo(planets[j].position.x, planets[j].position.y);
+      ctx.moveTo(mapPlanets[i].x, mapPlanets[i].y);
+      ctx.lineTo(mapPlanets[j].x, mapPlanets[j].y);
       ctx.stroke();
     }
   }
@@ -219,8 +469,9 @@ function drawMap() {
   for (const planet of mapPlanets) {
     ctx.beginPath();
     ctx.arc(planet.x, planet.y, planet.active ? 14 : 10, 0, Math.PI * 2);
-    ctx.fillStyle = planet.active ? "#f7b955" : "#6ad3d1";
-    ctx.shadowColor = planet.active ? "#f7b955" : "#6ad3d1";
+    const markerColor = planet.active ? MAP_MARKER_COLORS.current : getRiskColor(planet.riskLevel);
+    ctx.fillStyle = markerColor;
+    ctx.shadowColor = planet.active ? MAP_MARKER_COLORS.moderate : markerColor;
     ctx.shadowBlur = planet.active ? 18 : 8;
     ctx.fill();
     ctx.shadowBlur = 0;
@@ -245,7 +496,35 @@ function getQuantity(input) {
 }
 
 function handleTravel(destinationPlanetId) {
-  applyResult(travelToPlanet(state, destinationPlanetId));
+  applyResult(beginTravel(state, destinationPlanetId, {}, rng));
+}
+
+function handleCombatPreset(weights) {
+  const battle = state.combat.battle;
+  let allocation = computePresetAllocation(weights, battle.player.powerCapacity);
+  if (battle.player.hull >= battle.player.hullMax && allocation.repair > 0) {
+    allocation = {
+      ...allocation,
+      weapons: allocation.weapons + allocation.repair,
+      repair: 0
+    };
+  }
+  state = setPlayerAllocation(state, allocation);
+  render();
+}
+
+function handleCombatAction(action) {
+  applyResult(resolveIntegratedBattleTurn(state, action, rng));
+}
+
+function makeActionButton(label, className, action, title) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `action-btn ${className}`;
+  button.textContent = label;
+  button.title = title;
+  button.addEventListener("click", () => handleCombatAction(action));
+  return button;
 }
 
 function renderSliderMarkup(id, label, slider) {
@@ -255,6 +534,18 @@ function renderSliderMarkup(id, label, slider) {
       <output data-slider-label="${id}" for="${id}">${slider.label}</output>
     </div>
   `;
+}
+
+function renderMapLegend() {
+  elements.mapLegend.replaceChildren(
+    ...getMapLegendRows().map((row) => {
+      const item = document.createElement("div");
+      item.className = "map-legend-item";
+      item.innerHTML = `<span class="map-swatch" aria-hidden="true"></span><span>${row.label}</span>`;
+      item.querySelector(".map-swatch").style.backgroundColor = row.color;
+      return item;
+    })
+  );
 }
 
 function bindSliderLabel(input, label) {
@@ -284,5 +575,37 @@ function closeTravelDialog() {
   }
 }
 
+function getRiskColor(riskLevel) {
+  if (riskLevel === "high") {
+    return MAP_MARKER_COLORS.high;
+  }
+  if (riskLevel === "moderate") {
+    return MAP_MARKER_COLORS.moderate;
+  }
+  return MAP_MARKER_COLORS.low;
+}
+
+function resizeMapCanvas() {
+  const bounds = elements.canvas.getBoundingClientRect();
+  const width = Math.max(320, Math.round(bounds.width));
+  const height = Math.max(280, Math.round(bounds.height));
+  const pixelRatio = window.devicePixelRatio || 1;
+  const scaledWidth = Math.round(width * pixelRatio);
+  const scaledHeight = Math.round(height * pixelRatio);
+
+  if (elements.canvas.width !== scaledWidth || elements.canvas.height !== scaledHeight) {
+    elements.canvas.width = scaledWidth;
+    elements.canvas.height = scaledHeight;
+  }
+
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  return { width, height };
+}
+
 render();
-setInterval(drawMap, 60);
+window.addEventListener("resize", drawMap);
+setInterval(() => {
+  if (state.mode === "trade") {
+    drawMap();
+  }
+}, 60);

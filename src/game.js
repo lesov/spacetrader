@@ -1,4 +1,6 @@
-import { FUEL_RESOURCE_ID, planets, resources, startingPlayer } from "./data.js";
+import { PLAYER_CLASS_ID } from "./combat/data.js";
+import { buildShipState } from "./combat/rules.js";
+import { FUEL_RESOURCE_ID, campaign, planets, resources, startingPlayer } from "./data.js";
 
 export const PLANET_BY_ID = Object.fromEntries(planets.map((planet) => [planet.id, planet]));
 export const RESOURCE_BY_ID = Object.fromEntries(resources.map((resource) => [resource.id, resource]));
@@ -10,11 +12,29 @@ export function createInitialState() {
   return {
     credits: startingPlayer.credits,
     currentPlanetId: startingPlayer.currentPlanetId,
+    currentDate: campaign.startDate,
     fuel: startingPlayer.fuel,
     cargoCapacity: startingPlayer.cargoCapacity,
     cargo: {},
     tradedAtCurrentLocation: false,
-    messages: [`Docked at ${startingPlanet.name}. Arbitrage run initialized.`]
+    mode: "trade",
+    pendingTravel: null,
+    combat: null,
+    playerCombatShip: createInitialCombatShip(),
+    messages: [`Docked at ${startingPlanet.name}. ${campaign.startLabel} trading charter initialized.`]
+  };
+}
+
+export function createInitialCombatShip() {
+  return serializeCombatShip(buildShipState(PLAYER_CLASS_ID), true);
+}
+
+export function serializeCombatShip(ship, restoreShields = false) {
+  return {
+    classId: ship.classId,
+    hull: ship.hull,
+    shield: restoreShields ? ship.shieldMax : ship.shield,
+    weapons: ship.weapons.map((weapon) => ({ ...weapon }))
   };
 }
 
@@ -72,13 +92,24 @@ export function getTravelCost(fromPlanetId, toPlanetId) {
   return Math.max(4, Math.ceil(Math.sqrt(dx * dx + dy * dy) / 34));
 }
 
+export function getTravelDurationDays(fuelCost) {
+  return fuelCost * campaign.travelDaysPerFuel;
+}
+
+export function advanceDate(dateText, days) {
+  const date = parseGameDate(dateText);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatGameDateIso(date);
+}
+
 export function getDestinations(currentPlanetId) {
   getPlanet(currentPlanetId);
   return planets
     .filter((planet) => planet.id !== currentPlanetId)
     .map((planet) => ({
       ...planet,
-      fuelCost: getTravelCost(currentPlanetId, planet.id)
+      fuelCost: getTravelCost(currentPlanetId, planet.id),
+      travelDurationDays: getTravelDurationDays(getTravelCost(currentPlanetId, planet.id))
     }));
 }
 
@@ -188,9 +219,10 @@ export function travelToPlanet(state, destinationPlanetId, options = {}) {
       ...state,
       currentPlanetId: destination.id,
       fuel: state.fuel - cost,
+      currentDate: advanceDate(state.currentDate, getTravelDurationDays(cost)),
       tradedAtCurrentLocation: false
     },
-    `Traveled to ${destination.name}. Fuel spent: ${cost}.`
+    `Traveled to ${destination.name}. Fuel spent: ${cost}. Time elapsed: ${formatDuration(getTravelDurationDays(cost))}.`
   );
 }
 
@@ -206,7 +238,30 @@ export function cancelTravelConfirmation(state, destinationPlanetId) {
 
 export function validateMarketData() {
   const errors = [];
-  const allowedLocationNames = new Set(["Mars", "Europa", "Titan", "Mercury", "Ganymede", "Luna"]);
+  const allowedLocationNames = new Set([
+    "Callisto",
+    "Ceres",
+    "Earth",
+    "Enceladus",
+    "Europa",
+    "Ganymede",
+    "Io",
+    "Luna",
+    "Mars",
+    "Mercury",
+    "Titan",
+    "Triton",
+    "Venus"
+  ]);
+  const allowedAlignments = new Set([
+    "Earth-aligned",
+    "Mars-aligned",
+    "Titan-influenced",
+    "neutral",
+    "contested",
+    "independent"
+  ]);
+  const allowedRiskLevels = new Set(["low", "moderate", "high"]);
 
   for (const planet of planets) {
     if (!allowedLocationNames.has(planet.name)) {
@@ -215,6 +270,18 @@ export function validateMarketData() {
 
     if (!planet.type) {
       errors.push(`${planet.name} must define a Solar System location type.`);
+    }
+
+    if (!allowedAlignments.has(planet.factionAlignment)) {
+      errors.push(`${planet.name} must define an approved faction alignment.`);
+    }
+
+    if (!allowedRiskLevels.has(planet.riskLevel)) {
+      errors.push(`${planet.name} must define an approved risk level.`);
+    }
+
+    if (!planet.summary || !planet.strategicContext || !planet.note) {
+      errors.push(`${planet.name} must define player-facing setting context.`);
     }
 
     if (planet.produces.length !== 3) {
@@ -267,4 +334,24 @@ function appendMessage(state, message) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatDuration(days) {
+  if (days % 7 === 0) {
+    const weeks = days / 7;
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"}`;
+  }
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+function parseGameDate(dateText) {
+  const [year, month, day] = dateText.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatGameDateIso(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

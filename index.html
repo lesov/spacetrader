@@ -3,15 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Space Trader Local MVP</title>
+    <title>Space Trader 2175 Local MVP</title>
+    <link rel="stylesheet" href="./src/combat/styles.css">
     <link rel="stylesheet" href="./src/styles.css">
   </head>
   <body>
     <main class="app-shell">
       <section class="command-surface" aria-label="Space Trader">
-        <header class="topbar">
+        <header id="trade-topbar" class="topbar">
           <div>
             <h1>Space Trader</h1>
+            <p class="campaign-line"><span id="campaign-label"></span> | <span id="market-climate"></span></p>
             <p id="route-line" class="route-line"></p>
           </div>
           <dl class="status-grid" aria-label="Ship status">
@@ -28,6 +30,10 @@
               <dd id="cargo-space"></dd>
             </div>
             <div>
+              <dt>Date</dt>
+              <dd id="current-date"></dd>
+            </div>
+            <div>
               <dt>Location</dt>
               <dd id="current-planet"></dd>
             </div>
@@ -38,9 +44,15 @@
           </dl>
         </header>
 
-        <section class="flight-deck">
-          <div class="map-panel">
-            <canvas id="star-map" width="720" height="420" aria-label="Solar System trade route map"></canvas>
+        <section id="trade-flight-deck" class="flight-deck">
+          <div class="map-stack">
+            <div class="map-panel">
+              <canvas id="star-map" width="720" height="420" aria-label="Solar System trade route map"></canvas>
+            </div>
+            <aside class="map-legend" aria-labelledby="map-legend-heading">
+              <h3 id="map-legend-heading">Map Colors</h3>
+              <div id="map-legend" class="map-legend-list"></div>
+            </aside>
           </div>
 
           <aside class="planet-panel" aria-labelledby="planet-heading">
@@ -48,9 +60,14 @@
               <p class="eyebrow">Current Market</p>
               <h2 id="planet-heading"></h2>
               <p id="planet-note" class="planet-note"></p>
+              <div class="location-meta" aria-label="Location context">
+                <span id="location-alignment"></span>
+                <span id="location-risk"></span>
+              </div>
+              <p id="strategic-context" class="strategic-context"></p>
             </div>
             <div>
-              <h3>Production</h3>
+              <h3>Exports</h3>
               <div id="production-list" class="chip-row"></div>
             </div>
             <div>
@@ -60,7 +77,7 @@
           </aside>
         </section>
 
-        <section class="trade-layout">
+        <section id="trade-layout" class="trade-layout">
           <section class="market-panel" aria-labelledby="market-heading">
             <div class="section-heading">
               <h2 id="market-heading">Market</h2>
@@ -101,6 +118,80 @@
               <ol id="message-log" class="message-log"></ol>
             </section>
           </aside>
+        </section>
+
+        <section id="combat-mode" class="battle-shell embedded-battle" aria-label="Travel battle" hidden>
+          <header class="battle-topbar">
+            <div class="ship-status player-status" id="player-status">
+              <div class="ship-name" id="player-name"></div>
+              <div class="stat-row">
+                <span class="stat-label">Hull</span>
+                <span id="player-hull"></span>
+                <span class="stat-bar" id="player-hull-bar"></span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Shield</span>
+                <span id="player-shield"></span>
+                <span class="stat-bar" id="player-shield-bar"></span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Power</span>
+                <span id="player-power"></span>
+              </div>
+            </div>
+
+            <div class="turn-info">
+              <span class="turn-number" id="turn-number">1</span>
+              <span class="phase-label" id="phase-label">Allocate Power</span>
+            </div>
+
+            <div class="ship-status enemy-status">
+              <div class="ship-name" id="enemy-name"></div>
+              <div class="stat-row">
+                <span class="stat-label">Hull</span>
+                <span id="enemy-hull"></span>
+                <span class="stat-bar" id="enemy-hull-bar"></span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">Shield</span>
+                <span id="enemy-shield"></span>
+                <span class="stat-bar" id="enemy-shield-bar"></span>
+              </div>
+            </div>
+          </header>
+
+          <section class="battle-panel" id="allocation-panel">
+            <h2>Allocate Power</h2>
+            <div class="preset-row" id="preset-row"></div>
+            <div class="allocation-grid" id="allocation-grid"></div>
+            <div class="allocation-footer">
+              <span class="power-remaining" id="power-remaining-wrap">
+                Remaining: <strong id="power-remaining">0</strong>
+              </span>
+              <button id="end-allocation" type="button" disabled>End Allocation</button>
+            </div>
+          </section>
+
+          <section class="battle-panel" id="action-panel" hidden>
+            <h2>Select Action</h2>
+            <div class="action-buttons" id="action-buttons"></div>
+          </section>
+
+          <section class="battle-panel battle-end-panel" id="battle-end-panel" hidden>
+            <div class="result-heading" id="result-heading"></div>
+            <p id="result-subtext" class="result-subtext"></p>
+          </section>
+
+          <section class="battle-panel" id="combat-log-panel">
+            <h3>Combat Log</h3>
+            <ol class="combat-log" id="combat-log" reversed></ol>
+          </section>
+        </section>
+
+        <section id="game-over-panel" class="game-over-panel" aria-labelledby="game-over-heading" hidden>
+          <h2 id="game-over-heading">Run Ended</h2>
+          <p id="game-over-message"></p>
+          <button id="game-over-reset" type="button">Reset Run</button>
         </section>
       </section>
     </main>

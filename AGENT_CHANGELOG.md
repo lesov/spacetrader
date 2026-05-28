@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 17:50 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Moved the Solar System map legend out of the canvas overlay into a horizontal bar below the map so it does not block markers or labels.
+- Files changed: `index.html`, `src/styles.css`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
 ## 2026-05-28 17:48 CDT - Codex - feature/codex/2175-context-integration
 
 - Status: ready-for-review

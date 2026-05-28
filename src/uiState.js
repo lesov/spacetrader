@@ -33,12 +33,31 @@ export function formatCargo(used, capacity) {
   return `${used}/${capacity}`;
 }
 
+export function formatDate(dateText) {
+  const [year, month, day] = dateText.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+export function formatDuration(days) {
+  if (days % 7 === 0) {
+    const weeks = days / 7;
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"}`;
+  }
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
 export function getStatusView(state) {
   const planet = getPlanet(state.currentPlanetId);
   const cargoUsed = getCargoUsed(state);
   return {
     campaignLabel: campaign.startLabel,
     marketClimate: campaign.marketClimate,
+    currentDate: formatDate(state.currentDate),
     credits: formatCredits(state.credits),
     fuel: formatFuel(state.fuel),
     cargo: formatCargo(cargoUsed, state.cargoCapacity),
@@ -84,6 +103,8 @@ export function getDestinationRows(state) {
     factionAlignment: planet.factionAlignment,
     riskLevel: planet.riskLevel,
     fuelCost: getTravelCost(state.currentPlanetId, planet.id),
+    travelDurationDays: planet.travelDurationDays,
+    travelDurationLabel: formatDuration(planet.travelDurationDays),
     canTravel: state.fuel >= getTravelCost(state.currentPlanetId, planet.id),
     requiresConfirmation: !state.tradedAtCurrentLocation
   }));

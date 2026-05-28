@@ -3,7 +3,9 @@ export const FUEL_RESOURCE_ID = "fuel";
 export const campaign = {
   startYear: 2175,
   startLabel: "Late 2175",
-  marketClimate: "Post-Enceladus realignment"
+  startDate: "2175-12-01",
+  marketClimate: "Post-Enceladus realignment",
+  travelDaysPerFuel: 7
 };
 
 export const resources = [

@@ -10,6 +10,7 @@ export function createInitialState() {
   return {
     credits: startingPlayer.credits,
     currentPlanetId: startingPlayer.currentPlanetId,
+    currentDate: campaign.startDate,
     fuel: startingPlayer.fuel,
     cargoCapacity: startingPlayer.cargoCapacity,
     cargo: {},
@@ -72,13 +73,24 @@ export function getTravelCost(fromPlanetId, toPlanetId) {
   return Math.max(4, Math.ceil(Math.sqrt(dx * dx + dy * dy) / 34));
 }
 
+export function getTravelDurationDays(fuelCost) {
+  return fuelCost * campaign.travelDaysPerFuel;
+}
+
+export function advanceDate(dateText, days) {
+  const date = parseGameDate(dateText);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatGameDateIso(date);
+}
+
 export function getDestinations(currentPlanetId) {
   getPlanet(currentPlanetId);
   return planets
     .filter((planet) => planet.id !== currentPlanetId)
     .map((planet) => ({
       ...planet,
-      fuelCost: getTravelCost(currentPlanetId, planet.id)
+      fuelCost: getTravelCost(currentPlanetId, planet.id),
+      travelDurationDays: getTravelDurationDays(getTravelCost(currentPlanetId, planet.id))
     }));
 }
 
@@ -188,9 +200,10 @@ export function travelToPlanet(state, destinationPlanetId, options = {}) {
       ...state,
       currentPlanetId: destination.id,
       fuel: state.fuel - cost,
+      currentDate: advanceDate(state.currentDate, getTravelDurationDays(cost)),
       tradedAtCurrentLocation: false
     },
-    `Traveled to ${destination.name}. Fuel spent: ${cost}.`
+    `Traveled to ${destination.name}. Fuel spent: ${cost}. Time elapsed: ${formatDuration(getTravelDurationDays(cost))}.`
   );
 }
 
@@ -302,4 +315,24 @@ function appendMessage(state, message) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatDuration(days) {
+  if (days % 7 === 0) {
+    const weeks = days / 7;
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"}`;
+  }
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+function parseGameDate(dateText) {
+  const [year, month, day] = dateText.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatGameDateIso(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

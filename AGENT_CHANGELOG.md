@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 17:54 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Added campaign date advancement so successful travel moves the date forward by one week per route fuel unit, with date display and destination duration labels.
+- Files changed: `index.html`, `src/app.js`, `src/data.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `test/game.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/data.js` passed; `node --check src/game.js` passed; `node --check src/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
 ## 2026-05-28 17:50 CDT - Codex - feature/codex/2175-context-integration
 
 - Status: ready-for-review

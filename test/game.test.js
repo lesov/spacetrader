@@ -3,12 +3,14 @@ import test from "node:test";
 
 import { FUEL_RESOURCE_ID, campaign, planets, resources } from "../src/data.js";
 import {
+  advanceDate,
   buyResource,
   cancelTravelConfirmation,
   createInitialState,
   getCargoRemaining,
   getCargoUsed,
   getMarketPrice,
+  getTravelDurationDays,
   getTravelCost,
   sellResource,
   travelToPlanet,
@@ -17,6 +19,8 @@ import {
 import {
   formatCargo,
   formatCredits,
+  formatDate,
+  formatDuration,
   formatFuel,
   getDestinationRows,
   getMapLegendRows,
@@ -114,13 +118,16 @@ test("fuel purchases fail when credits are insufficient", () => {
 test("travel consumes fuel and changes current location after local trade", () => {
   const state = buyResource(createInitialState(), "metals", 1).state;
   const cost = getTravelCost("luna", "europa");
+  const days = getTravelDurationDays(cost);
 
   const result = travelToPlanet(state, "europa");
 
   assert.equal(result.ok, true);
   assert.equal(result.state.currentPlanetId, "europa");
   assert.equal(result.state.fuel, state.fuel - cost);
+  assert.equal(result.state.currentDate, advanceDate(state.currentDate, days));
   assert.equal(result.state.tradedAtCurrentLocation, false);
+  assert.match(result.message, new RegExp(`Time elapsed: ${formatDuration(days)}`));
 });
 
 test("travel fails when fuel is insufficient", () => {
@@ -131,6 +138,7 @@ test("travel fails when fuel is insufficient", () => {
   assert.equal(result.ok, false);
   assert.equal(result.state.currentPlanetId, "luna");
   assert.equal(result.state.fuel, 0);
+  assert.equal(result.state.currentDate, state.currentDate);
 });
 
 test("travel from an untraded location requires confirmation before fuel is spent", () => {
@@ -143,18 +151,21 @@ test("travel from an untraded location requires confirmation before fuel is spen
   assert.equal(result.destinationPlanetId, "europa");
   assert.equal(result.state.currentPlanetId, "luna");
   assert.equal(result.state.fuel, state.fuel);
+  assert.equal(result.state.currentDate, state.currentDate);
   assert.match(result.message, /Leave Luna without trading/);
 });
 
 test("confirmed travel from an untraded location consumes fuel and changes location", () => {
   const state = createInitialState();
   const cost = getTravelCost("luna", "europa");
+  const days = getTravelDurationDays(cost);
 
   const result = travelToPlanet(state, "europa", { confirmed: true });
 
   assert.equal(result.ok, true);
   assert.equal(result.state.currentPlanetId, "europa");
   assert.equal(result.state.fuel, state.fuel - cost);
+  assert.equal(result.state.currentDate, advanceDate(state.currentDate, days));
   assert.equal(result.state.tradedAtCurrentLocation, false);
 });
 
@@ -167,6 +178,7 @@ test("canceled travel from an untraded location keeps fuel and location unchange
   assert.equal(result.canceled, true);
   assert.equal(result.state.currentPlanetId, "luna");
   assert.equal(result.state.fuel, 30);
+  assert.equal(result.state.currentDate, "2175-12-01");
   assert.match(result.message, /canceled/);
 });
 
@@ -226,8 +238,11 @@ test("initial data uses real Solar System planets or satellites", () => {
 test("2175 campaign metadata is exposed without future crisis spoilers", () => {
   assert.equal(campaign.startYear, 2175);
   assert.equal(campaign.startLabel, "Late 2175");
+  assert.equal(campaign.startDate, "2175-12-01");
+  assert.equal(campaign.travelDaysPerFuel, 7);
   assert.equal(campaign.marketClimate, "Post-Enceladus realignment");
   assert.equal(createInitialState().currentPlanetId, "luna");
+  assert.equal(createInitialState().currentDate, campaign.startDate);
   assert.equal(planets.some((planet) => /Deimos/i.test(`${planet.note} ${planet.summary} ${planet.strategicContext}`)), false);
 });
 
@@ -292,9 +307,12 @@ test("ui state derives cargo capacity and formatted quantities", () => {
   assert.equal(formatCredits(1200), "1,200 cr");
   assert.equal(formatFuel(12), "12 units");
   assert.equal(formatCargo(getCargoUsed(state), state.cargoCapacity), "7/20");
+  assert.equal(formatDate("2176-01-05"), "Jan 5, 2176");
+  assert.equal(formatDuration(28), "4 weeks");
   assert.equal(getStatusView(state).routeLine, "Luna earth moon trade hub | 13 cargo slots open");
   assert.equal(getStatusView(state).campaignLabel, "Late 2175");
   assert.equal(getStatusView(state).marketClimate, "Post-Enceladus realignment");
+  assert.equal(getStatusView(state).currentDate, "Dec 1, 2175");
   assert.equal(getStatusView(state).tradeStatus, "No local trade yet");
 });
 
@@ -338,6 +356,8 @@ test("destination rows expose confirmation state for untraded locations", () => 
 
   assert.equal(destinations.every((row) => row.requiresConfirmation === true), true);
   assert.equal(destinations.every((row) => row.factionAlignment && row.riskLevel), true);
+  assert.equal(destinations.every((row) => row.travelDurationDays === row.fuelCost * campaign.travelDaysPerFuel), true);
+  assert.equal(destinations.every((row) => /weeks?$/.test(row.travelDurationLabel)), true);
 
   const tradedState = buyResource(state, "metals", 1).state;
   assert.equal(getDestinationRows(tradedState).every((row) => row.requiresConfirmation === false), true);

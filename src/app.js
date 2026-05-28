@@ -27,6 +27,7 @@ const elements = {
   credits: document.querySelector("#credits"),
   fuel: document.querySelector("#fuel"),
   cargoSpace: document.querySelector("#cargo-space"),
+  currentDate: document.querySelector("#current-date"),
   currentPlanet: document.querySelector("#current-planet"),
   tradeStatus: document.querySelector("#trade-status"),
   routeLine: document.querySelector("#route-line"),
@@ -106,6 +107,7 @@ function renderStatus() {
   elements.credits.textContent = status.credits;
   elements.fuel.textContent = status.fuel;
   elements.cargoSpace.textContent = status.cargo;
+  elements.currentDate.textContent = status.currentDate;
   elements.currentPlanet.textContent = status.currentPlanet;
   elements.tradeStatus.textContent = status.tradeStatus;
   elements.routeLine.textContent = status.routeLine;
@@ -136,7 +138,7 @@ function renderPlanetPanel() {
       button.type = "button";
       button.className = "destination-button";
       button.disabled = !destination.canTravel;
-      button.innerHTML = `<span>${destination.name}<small>${destination.type} | ${destination.factionAlignment} | ${destination.riskLevel} risk</small></span><strong>${destination.fuelCost} fuel</strong>`;
+      button.innerHTML = `<span>${destination.name}<small>${destination.type} | ${destination.factionAlignment} | ${destination.riskLevel} risk</small></span><strong>${destination.fuelCost} fuel | ${destination.travelDurationLabel}</strong>`;
       button.addEventListener("click", () => handleTravel(destination.id));
       return button;
     })

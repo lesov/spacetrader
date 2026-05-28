@@ -1,3 +1,5 @@
+import { PLAYER_CLASS_ID } from "./combat/data.js";
+import { buildShipState } from "./combat/rules.js";
 import { FUEL_RESOURCE_ID, campaign, planets, resources, startingPlayer } from "./data.js";
 
 export const PLANET_BY_ID = Object.fromEntries(planets.map((planet) => [planet.id, planet]));
@@ -15,7 +17,24 @@ export function createInitialState() {
     cargoCapacity: startingPlayer.cargoCapacity,
     cargo: {},
     tradedAtCurrentLocation: false,
+    mode: "trade",
+    pendingTravel: null,
+    combat: null,
+    playerCombatShip: createInitialCombatShip(),
     messages: [`Docked at ${startingPlanet.name}. ${campaign.startLabel} trading charter initialized.`]
+  };
+}
+
+export function createInitialCombatShip() {
+  return serializeCombatShip(buildShipState(PLAYER_CLASS_ID), true);
+}
+
+export function serializeCombatShip(ship, restoreShields = false) {
+  return {
+    classId: ship.classId,
+    hull: ship.hull,
+    shield: restoreShields ? ship.shieldMax : ship.shield,
+    weapons: ship.weapons.map((weapon) => ({ ...weapon }))
   };
 }
 

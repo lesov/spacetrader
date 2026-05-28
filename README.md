@@ -21,6 +21,7 @@ http://localhost:4174
 - Use sliders to buy or sell multiple units in one action.
 - Spend deuterium fuel to travel between worlds, moons, and stations.
 - Confirm travel if you try to leave a location before trading there.
+- Enter battle mode during some dangerous voyages; longer routes and higher-risk destinations raise the chance of hostile contact.
 - Sell cargo where prices are higher.
 - Buy fuel as needed.
 - Stay within the ship cargo limit.

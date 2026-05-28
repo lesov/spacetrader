@@ -13,6 +13,7 @@ import {
   getPlanet,
   getTravelCost
 } from "./game.js";
+import { getEncounterChance } from "./travelCombat.js";
 
 export const MAP_MARKER_COLORS = {
   current: "#f4f0e8",
@@ -63,7 +64,7 @@ export function getStatusView(state) {
     cargo: formatCargo(cargoUsed, state.cargoCapacity),
     currentPlanet: planet.name,
     routeLine: `${planet.name} ${planet.type.toLowerCase()} trade hub | ${getCargoRemaining(state)} cargo slots open`,
-    tradeStatus: state.tradedAtCurrentLocation ? "Trade logged here" : "No local trade yet"
+    tradeStatus: state.mode === "combat" ? "In combat" : state.tradedAtCurrentLocation ? "Trade logged here" : "No local trade yet"
   };
 }
 
@@ -103,6 +104,8 @@ export function getDestinationRows(state) {
     factionAlignment: planet.factionAlignment,
     riskLevel: planet.riskLevel,
     fuelCost: getTravelCost(state.currentPlanetId, planet.id),
+    encounterChance: getEncounterChance(state, planet.id),
+    encounterRiskLabel: `${Math.round(getEncounterChance(state, planet.id) * 100)}% battle risk`,
     travelDurationDays: planet.travelDurationDays,
     travelDurationLabel: formatDuration(planet.travelDurationDays),
     canTravel: state.fuel >= getTravelCost(state.currentPlanetId, planet.id),

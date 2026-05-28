@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 18:02 CDT - Codex - feature/codex/2175-context-integration
+
+- Status: ready-for-review
+- Summary: Fixed battle mode not triggering by integrating travel combat into the 2175 branch and tying encounter chance to route distance, destination risk, and a random roll.
+- Files changed: `README.md`, `index.html`, `src/app.js`, `src/game.js`, `src/styles.css`, `src/uiState.js`, `src/travelCombat.js`, `src/combat/ai.js`, `src/combat/data.js`, `src/combat/rng.js`, `src/combat/rules.js`, `src/combat/styles.css`, `src/combat/uiState.js`, `test/combat.test.js`, `test/travelCombat.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` passed; `node --check src/app.js` passed; `node --check src/game.js` passed; `node --check src/travelCombat.js` passed; `node --check src/uiState.js` passed; `node --check src/combat/ai.js` passed; `node --check src/combat/rules.js` passed; `node --check src/combat/uiState.js` passed; `curl -I http://127.0.0.1:4175` returned `200 OK`; `curl -I http://127.0.0.1:4175/src/app.js` returned `200 OK`.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work remains isolated in `/tmp/spacetrader-codex-2175-context`; human UI review is still required at `http://127.0.0.1:4175`.
+
 ## 2026-05-28 17:54 CDT - Codex - feature/codex/2175-context-integration
 
 - Status: ready-for-review

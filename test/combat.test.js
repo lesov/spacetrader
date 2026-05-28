@@ -5,8 +5,13 @@ import { SHIP_CLASSES, PLAYER_CLASS_ID, ENEMY_CLASS_ID, ENGINES_EVASION_PER_POIN
 import {
   buildShipState, createBattleState,
   validateAllocation, totalAllocation,
-  isWeaponAvailable, resolveFullTurn, checkBattleEnd, runAwayChance
+  isWeaponAvailable, resolveFullTurn, checkBattleEnd, runAwayChance,
+  effectivePoints
 } from '../src/combat/rules.js';
+import { createInitialState } from '../src/game.js';
+import { upgradeShip } from '../src/shipyard.js';
+import { beginTravel } from '../src/travelCombat.js';
+import { createRng as makeRng } from '../src/combat/rng.js';
 import { randomAI, aggressorAI } from '../src/combat/ai.js';
 import {
   isAllocationValid, allocationRemaining, getWeaponRows,
@@ -63,11 +68,11 @@ test('ship stat values are within documented ranges', () => {
   for (const [id, cls] of Object.entries(SHIP_CLASSES)) {
     assert.ok(cls.hullMax >= 50 && cls.hullMax <= 150, `${id} hullMax out of range`);
     assert.ok(cls.shieldMax >= 20 && cls.shieldMax <= 100, `${id} shieldMax out of range`);
-    assert.ok(cls.powerCapacity >= 6 && cls.powerCapacity <= 12, `${id} powerCapacity out of range`);
+    assert.ok(cls.powerCapacity >= 6 && cls.powerCapacity <= 14, `${id} powerCapacity out of range`);
     assert.ok(cls.baseAccuracy >= 0.40 && cls.baseAccuracy <= 0.80, `${id} baseAccuracy out of range`);
     assert.ok(cls.baseEvasion >= 0.05 && cls.baseEvasion <= 0.30, `${id} baseEvasion out of range`);
     assert.ok(cls.shieldRegen >= 2 && cls.shieldRegen <= 5, `${id} shieldRegen out of range`);
-    assert.ok(cls.repairRate >= 1 && cls.repairRate <= 3, `${id} repairRate out of range`);
+    assert.ok(cls.repairRate >= 1 && cls.repairRate <= 5, `${id} repairRate out of range`);
   }
 });
 
@@ -115,8 +120,8 @@ test('validateAllocation rejects non-integer values', () => {
 
 test('shield regen restores shieldRegen * shields allocation per turn', () => {
   const state = createBattleState('vanguard', 'bastion');
-  // Deplete player shield first
-  const damagedPlayer = { ...state.player, shield: 10, allocation: { weapons: 0, shields: 3, engines: 3, sensors: 2, repair: 2 } };
+  // Deplete player shield first; clear basePower so test is purely allocation-based
+  const damagedPlayer = { ...state.player, basePower: {}, shield: 10, allocation: { weapons: 0, shields: 3, engines: 3, sensors: 2, repair: 2 } };
   const damagedState = { ...state, player: damagedPlayer };
 
   // Pass hold/hold so no damage, just regen
@@ -181,8 +186,10 @@ test('shield absorbs non-penetrating damage before hull', () => {
   };
   // Enemy with no evasion, low shields so we can see spillover.
   // Allocation all zeros so hull repair doesn't skew the expected hull calculation.
+  // basePower cleared so shield regen doesn't pre-restore shields before the attack.
   const lowShieldEnemy = {
     ...state.enemy,
+    basePower: {},
     baseEvasion: 0.0,
     shield: 5,
     hull: 100,
@@ -697,4 +704,104 @@ test('repair tooltip warns when hull is at max', () => {
   ship.allocation = { weapons: 4, shields: 2, engines: 2, sensors: 2, repair: 0 };
   const tip = systemTooltip('repair', ship);
   assert.ok(tip.toLowerCase().includes('full') || tip.toLowerCase().includes('max') || tip.toLowerCase().includes('unavailable'));
+});
+
+// ── effectivePoints ───────────────────────────────────────────────────────────
+
+test('effectivePoints sums basePower and allocation correctly', () => {
+  const ship = buildShipState('vanguard'); // basePower: { shields: 1 }
+  ship.allocation = { weapons: 3, shields: 2, engines: 1, sensors: 1, repair: 3 };
+
+  // shields: basePower 1 + allocation 2 = 3
+  assert.equal(effectivePoints(ship, 'shields'), 3);
+  // weapons: basePower 0 (not in vanguard basePower) + 3 = 3
+  assert.equal(effectivePoints(ship, 'weapons'), 3);
+  // engines: basePower 0 + 1 = 1
+  assert.equal(effectivePoints(ship, 'engines'), 1);
+});
+
+test('effectivePoints with basePower.engines=1 affects runAwayChance', () => {
+  const ship = buildShipState('falcon'); // basePower: { engines: 1, sensors: 1 }
+  ship.allocation = { weapons: 4, shields: 0, engines: 2, sensors: 2, repair: 0 };
+  // effective engines = 1 + 2 = 3; effective sensors = 1 + 2 = 3
+  const expected = Math.min(0.80, 3 * 0.12 + 3 * 0.05);
+  assert.ok(Math.abs(runAwayChance(ship) - expected) < 0.0001);
+});
+
+test('effectivePoints with basePower cleared falls back to allocation only', () => {
+  const ship = buildShipState('bastion'); // basePower: { weapons: 1, shields: 1 }
+  ship.basePower = {};
+  ship.allocation = { weapons: 4, shields: 3, engines: 2, sensors: 1, repair: 2 };
+  assert.equal(effectivePoints(ship, 'weapons'), 4);
+  assert.equal(effectivePoints(ship, 'shields'), 3);
+});
+
+test('bastion with basePower.weapons=1 and 0 allocation still has effectivePoints > 0', () => {
+  const ship = buildShipState('bastion'); // basePower: { weapons: 1 }
+  ship.allocation = { weapons: 0, shields: 6, engines: 2, sensors: 2, repair: 2 };
+  assert.equal(effectivePoints(ship, 'weapons'), 1);
+});
+
+// ── Power capacity in battles after engine upgrade ────────────────────────────
+
+test('battle started after engine upgrade uses higher powerCapacity', () => {
+  let state = {
+    ...createInitialState(),
+    currentPlanetId: 'luna',
+    credits: 100000,
+    cargo: { shipParts: 30 },
+    tradedAtCurrentLocation: true
+  };
+
+  // Do one power upgrade
+  state = upgradeShip(state, 'power').state;
+  const expectedPower = SHIP_CLASSES.vanguard.powerCapacity + 1; // 11
+
+  // Trigger travel to encounter
+  const rng = makeRng(999);
+  // Force encounter by trying many seeds to find one that triggers
+  let battleState = null;
+  for (let seed = 1; seed < 1000; seed++) {
+    const testRng = makeRng(seed);
+    const result = beginTravel(state, 'mars', { confirmed: true }, testRng);
+    if (result.state.mode === 'combat' && result.state.combat?.battle) {
+      battleState = result.state;
+      break;
+    }
+  }
+
+  if (battleState) {
+    // Player ship in battle should have the upgraded power capacity
+    assert.equal(battleState.combat.battle.player.powerCapacity, expectedPower);
+    // Allocation should be validatable against the new capacity
+    const alloc = { weapons: 2, shields: 2, engines: 2, sensors: 3, repair: 2 };
+    assert.equal(validateAllocation(alloc, expectedPower), '', 'Allocation summing to 11 should be valid');
+  }
+  // If no encounter found (very low probability), test is skipped implicitly
+});
+
+// ── computePresetAllocation at various pool sizes ─────────────────────────────
+
+test('computePresetAllocation totals exactly to capacity for 8, 10, 11, 12, 13, 14 points', () => {
+  for (const preset of PRESETS) {
+    for (const cap of [8, 10, 11, 12, 13, 14]) {
+      const alloc = computePresetAllocation(preset.weights, cap);
+      const total = alloc.weapons + alloc.shields + alloc.engines + alloc.sensors + alloc.repair;
+      assert.equal(total, cap, `${preset.label} at cap ${cap}: total ${total} ≠ ${cap}`);
+    }
+  }
+});
+
+// ── basePower flows through buildShipState ────────────────────────────────────
+
+test('buildShipState includes basePower from class definition', () => {
+  const ship = buildShipState('vanguard');
+  assert.deepEqual(ship.basePower, SHIP_CLASSES.vanguard.basePower);
+});
+
+test('buildShipState with powerCapacity override preserves it', () => {
+  const ship = buildShipState('vanguard', { powerCapacity: 13 });
+  assert.equal(ship.powerCapacity, 13);
+  // basePower still from class
+  assert.deepEqual(ship.basePower, SHIP_CLASSES.vanguard.basePower);
 });

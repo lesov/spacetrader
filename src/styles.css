@@ -592,3 +592,142 @@ h3 {
     height: 320px;
   }
 }
+
+/* ── Shipyard panel ─────────────────────────────────────────────────────────── */
+
+.shipyard-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(17, 18, 23, 0.9);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  padding: 16px;
+}
+
+.section-heading-note {
+  color: var(--teal);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.shipyard-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.shipyard-section {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.shipyard-ship-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.shipyard-stat {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.shipyard-stat strong {
+  color: var(--text);
+}
+
+.shipyard-upgrade-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(7, 8, 13, 0.6);
+}
+
+.upgrade-info {
+  display: grid;
+  gap: 3px;
+}
+
+.upgrade-info strong {
+  font-size: 0.88rem;
+}
+
+.upgrade-info small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.shipyard-btn {
+  min-width: 88px;
+  min-height: 34px;
+  padding: 6px 10px;
+  flex: 0 0 auto;
+}
+
+.shipyard-btn:not(:disabled) {
+  border-color: rgba(106, 211, 209, 0.6);
+}
+
+.shipyard-catalog-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(7, 8, 13, 0.6);
+}
+
+.shipyard-catalog-row.current-ship {
+  border-color: rgba(104, 211, 145, 0.45);
+  background: rgba(104, 211, 145, 0.06);
+}
+
+.catalog-info {
+  display: grid;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.catalog-info strong {
+  font-size: 0.88rem;
+}
+
+.catalog-info small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.catalog-price {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+/* Base power tag in allocation UI */
+.base-power-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid rgba(106, 211, 209, 0.5);
+  border-radius: 999px;
+  color: var(--teal);
+  font-size: 0.70rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* Effective total display in allocation cell */
+.alloc-effective {
+  color: var(--teal);
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-width: 24px;
+  text-align: center;
+}

@@ -6,10 +6,11 @@ import {
 
 // ── Ship construction ────────────────────────────────────────────────────────
 
-export function buildShipState(classId) {
+// overrides can include powerCapacity (for engine-upgraded player ships).
+export function buildShipState(classId, overrides = {}) {
   const cls = SHIP_CLASSES[classId];
   if (!cls) throw new Error(`Unknown ship class: ${classId}`);
-  return {
+  const base = {
     classId,
     label: cls.label,
     hullMax: cls.hullMax,
@@ -17,6 +18,7 @@ export function buildShipState(classId) {
     shieldMax: cls.shieldMax,
     shield: cls.shieldMax,
     powerCapacity: cls.powerCapacity,
+    basePower: cls.basePower ?? {},
     baseAccuracy: cls.baseAccuracy,
     baseEvasion: cls.baseEvasion,
     shieldRegen: cls.shieldRegen,
@@ -24,6 +26,7 @@ export function buildShipState(classId) {
     weapons: cls.weapons.map(w => ({ ...w, cooldownRemaining: 0 })),
     allocation: { weapons: 0, shields: 0, engines: 0, sensors: 0, repair: 0 }
   };
+  return { ...base, ...overrides };
 }
 
 export function createBattleState(playerClassId, enemyClassId) {
@@ -35,6 +38,14 @@ export function createBattleState(playerClassId, enemyClassId) {
     enemy: buildShipState(enemyClassId),
     log: []
   };
+}
+
+// ── Effective points helper ──────────────────────────────────────────────────
+
+// Returns the effective level of a combat system: innate base power + allocated points.
+// Innate base power is free and does not count against the allocatable pool.
+export function effectivePoints(ship, system) {
+  return (ship.basePower?.[system] ?? 0) + ship.allocation[system];
 }
 
 // ── Allocation validation ────────────────────────────────────────────────────
@@ -176,12 +187,12 @@ export function resolveFullTurn(state, playerAction, aiAction, rng) {
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 function applyShieldRegen(ship) {
-  const gained = ship.shieldRegen * ship.allocation.shields;
+  const gained = ship.shieldRegen * effectivePoints(ship, 'shields');
   return { ...ship, shield: Math.min(ship.shieldMax, ship.shield + gained) };
 }
 
 function applyHullRepair(ship) {
-  const gained = ship.repairRate * ship.allocation.repair;
+  const gained = ship.repairRate * effectivePoints(ship, 'repair');
   return { ...ship, hull: Math.min(ship.hullMax, ship.hull + gained) };
 }
 
@@ -191,10 +202,10 @@ function resolveWeaponFire(side, attacker, defender, weaponId, rng, turn) {
 
   const hitChance = clamp(
     attacker.baseAccuracy
-    + attacker.allocation.sensors * SENSORS_ACCURACY_PER_POINT
+    + effectivePoints(attacker, 'sensors') * SENSORS_ACCURACY_PER_POINT
     + weapon.accuracyMod
     - defender.baseEvasion
-    - defender.allocation.engines * ENGINES_EVASION_PER_POINT,
+    - effectivePoints(defender, 'engines') * ENGINES_EVASION_PER_POINT,
     0.05, 0.95
   );
 
@@ -211,7 +222,7 @@ function resolveWeaponFire(side, attacker, defender, weaponId, rng, turn) {
     };
   }
 
-  const rawDamage = weapon.baseDamage * attacker.allocation.weapons;
+  const rawDamage = weapon.baseDamage * effectivePoints(attacker, 'weapons');
   const penetrating = Math.round(rawDamage * weapon.shieldPenetration);
   const shieldHit = rawDamage - penetrating;
 
@@ -263,10 +274,10 @@ export function checkBattleEnd(player, enemy) {
   return null;
 }
 
-// Escape chance: engines×12% + sensors×5%, clamped to [5%, 80%].
+// Escape chance: effective engines×12% + effective sensors×5%, clamped to [5%, 80%].
 export function runAwayChance(player) {
   return clamp(
-    player.allocation.engines * 0.12 + player.allocation.sensors * 0.05,
+    effectivePoints(player, 'engines') * 0.12 + effectivePoints(player, 'sensors') * 0.05,
     0.05, 0.80
   );
 }

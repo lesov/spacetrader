@@ -21,10 +21,12 @@ import {
   getMarketRows,
   getPlanetMapView,
   getProjectedMapView,
+  getShipyardView,
   getStatusView
 } from "./uiState.js";
+import { upgradeShip, buyShip } from "./shipyard.js";
 import { createRng } from "./combat/rng.js";
-import { runAwayChance } from "./combat/rules.js";
+import { effectivePoints, runAwayChance } from "./combat/rules.js";
 import {
   SYSTEMS,
   SYSTEM_LABELS,
@@ -49,6 +51,9 @@ const elements = {
   tradeTopbar: document.querySelector("#trade-topbar"),
   tradeFlightDeck: document.querySelector("#trade-flight-deck"),
   tradeLayout: document.querySelector("#trade-layout"),
+  shipyardPanel: document.querySelector("#shipyard-panel"),
+  shipyardStatus: document.querySelector("#shipyard-status"),
+  shipyardBody: document.querySelector("#shipyard-body"),
   combatMode: document.querySelector("#combat-mode"),
   gameOverPanel: document.querySelector("#game-over-panel"),
   gameOverMessage: document.querySelector("#game-over-message"),
@@ -172,6 +177,7 @@ function renderMode() {
   elements.tradeTopbar.hidden = !tradeVisible;
   elements.tradeFlightDeck.hidden = !tradeVisible;
   elements.tradeLayout.hidden = !tradeVisible;
+  elements.shipyardPanel.hidden = !tradeVisible;
   elements.combatMode.hidden = state.mode !== "combat";
   elements.gameOverPanel.hidden = state.mode !== "gameOver";
 }
@@ -182,6 +188,7 @@ function renderTrade() {
   renderMapLegend();
   renderMarket();
   renderCargo();
+  renderShipyard();
   renderLog();
   drawMap();
 }
@@ -284,6 +291,117 @@ function renderCargo() {
   elements.cargoList.replaceChildren(...rows);
 }
 
+function renderShipyard() {
+  const view = getShipyardView(state);
+
+  if (!view.isIndustrial) {
+    elements.shipyardStatus.textContent = "No licensed shipyard at this port.";
+    elements.shipyardBody.replaceChildren();
+    return;
+  }
+
+  elements.shipyardStatus.textContent = `${view.planetName} Fleet Services`;
+
+  const sections = [];
+
+  // Current ship info
+  const shipInfo = document.createElement("div");
+  shipInfo.className = "shipyard-section";
+  shipInfo.innerHTML = `
+    <h3>Active Vessel</h3>
+    <div class="shipyard-ship-info">
+      <span class="shipyard-stat">Power: <strong>${view.currentShip.effectivePower}</strong></span>
+      <span class="shipyard-stat">Cargo: <strong>${view.currentShip.effectiveCargo}</strong></span>
+      <span class="shipyard-stat">Cargo upgrades: <strong>${view.currentShip.cargoUpgradeLevel}/${view.currentShip.cargoUpgradeMax}</strong></span>
+      <span class="shipyard-stat">Engine upgrades: <strong>${view.currentShip.powerUpgradeLevel}/${view.currentShip.powerUpgradeMax}</strong></span>
+    </div>
+  `;
+  sections.push(shipInfo);
+
+  // Upgrades
+  const upgradesSection = document.createElement("div");
+  upgradesSection.className = "shipyard-section";
+  upgradesSection.innerHTML = `<h3>Refit Services</h3>`;
+
+  for (const [kind, upgrade, label] of [
+    ['cargo', view.cargoUpgrade, 'Expand Cargo Bay'],
+    ['power', view.powerUpgrade, 'Upgrade Fusion Drive']
+  ]) {
+    const item = document.createElement("div");
+    item.className = "shipyard-upgrade-row";
+
+    const costText = upgrade.atMax
+      ? "Maximum level reached"
+      : `${upgrade.parts} Ship Parts + ${new Intl.NumberFormat("en-US").format(upgrade.credits)} cr → Level ${upgrade.nextLevel}`;
+
+    item.innerHTML = `
+      <div class="upgrade-info">
+        <strong>${label}</strong>
+        <small>${costText}</small>
+      </div>
+    `;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "shipyard-btn";
+    button.textContent = upgrade.atMax ? "Maxed" : "Upgrade";
+    button.disabled = !upgrade.canUpgrade;
+    if (!upgrade.canUpgrade && upgrade.reason) {
+      button.title = upgrade.reason;
+    }
+    button.addEventListener("click", () => {
+      applyResult(upgradeShip(state, kind));
+    });
+
+    item.appendChild(button);
+    upgradesSection.appendChild(item);
+  }
+  sections.push(upgradesSection);
+
+  // Ship catalog
+  const catalogSection = document.createElement("div");
+  catalogSection.className = "shipyard-section";
+  catalogSection.innerHTML = `<h3>Available Hulls</h3>`;
+
+  for (const entry of view.catalog) {
+    const row = document.createElement("div");
+    row.className = `shipyard-catalog-row${entry.isCurrent ? " current-ship" : ""}`;
+
+    const basePowerText = Object.entries(entry.basePower)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `+${v} ${k}`)
+      .join(", ");
+
+    row.innerHTML = `
+      <div class="catalog-info">
+        <strong>${entry.label}${entry.isCurrent ? " (active)" : ""}</strong>
+        <small>Power ${entry.powerCapacity} | Cargo ${entry.cargoCapacity} | Hull ${entry.hullMax} | Shield ${entry.shieldMax}${basePowerText ? ` | Innate: ${basePowerText}` : ""}</small>
+        <small class="catalog-price">${entry.priceLabel}</small>
+      </div>
+    `;
+
+    if (!entry.isCurrent) {
+      const buyButton = document.createElement("button");
+      buyButton.type = "button";
+      buyButton.className = "shipyard-btn";
+      buyButton.textContent = "Purchase";
+      buyButton.disabled = !entry.canBuy;
+      if (!entry.canBuy && entry.buyReason) {
+        buyButton.title = entry.buyReason;
+      }
+      buyButton.addEventListener("click", () => {
+        applyResult(buyShip(state, entry.classId));
+      });
+      row.appendChild(buyButton);
+    }
+
+    catalogSection.appendChild(row);
+  }
+  sections.push(catalogSection);
+
+  elements.shipyardBody.replaceChildren(...sections);
+}
+
 function renderLog() {
   elements.messageLog.replaceChildren(
     ...state.messages.map((message) => {
@@ -365,6 +483,15 @@ function renderAllocation(player) {
       label.className = "alloc-label";
       label.textContent = SYSTEM_LABELS[system];
 
+      // Show innate base power if present
+      const baseVal = player.basePower?.[system] ?? 0;
+      if (baseVal > 0) {
+        const baseTag = document.createElement("span");
+        baseTag.className = "base-power-tag";
+        baseTag.textContent = `+${baseVal} innate`;
+        label.appendChild(baseTag);
+      }
+
       const controls = document.createElement("div");
       controls.className = "alloc-controls";
 
@@ -382,6 +509,12 @@ function renderAllocation(player) {
       value.className = "alloc-value";
       value.textContent = player.allocation[system];
 
+      // Show effective total (base + allocated)
+      const effective = effectivePoints(player, system);
+      const effectiveSpan = document.createElement("span");
+      effectiveSpan.className = "alloc-effective";
+      effectiveSpan.textContent = effective > 0 ? `=${effective}` : "";
+
       const plusButton = document.createElement("button");
       plusButton.type = "button";
       plusButton.className = "alloc-btn";
@@ -392,7 +525,7 @@ function renderAllocation(player) {
         render();
       });
 
-      controls.append(minusButton, value, plusButton);
+      controls.append(minusButton, value, effectiveSpan, plusButton);
       cell.append(label, controls);
       return cell;
     })
@@ -418,7 +551,7 @@ function renderActions(player) {
   runButton.type = "button";
   runButton.className = "action-btn run";
   runButton.innerHTML = `<span>Run Away</span><span class="weapon-note">${chance}% success</span>`;
-  runButton.title = "Escape chance: engines x 12% + sensors x 5%. Enemy may still fire.";
+  runButton.title = "Escape chance: effective engines x 12% + effective sensors x 5%. Enemy may still fire.";
   runButton.addEventListener("click", () => handleCombatAction({ type: "run" }));
   actionButtons.push(runButton);
 

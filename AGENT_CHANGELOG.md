@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 19:00 CDT - Claude - feature/claude/ship-upgrades-and-purchasing
+
+- Status: started
+- Summary: Beginning implementation of ship upgrades (cargo + engine/power), new ship purchasing, and innate per-class base power per SHIP_UPGRADES_EXECUTION_PLAN.md. Branch created from worktree-agent-aff9549c96fd9f5ff HEAD (main).
+- Files changed: AGENT_CHANGELOG.md
+- Tests run: Not yet; implementation in progress.
+- UI review: not-applicable (not yet reached)
+- Blockers or coordination notes: Work isolated in worktree /usr/local/projects/spacetrader/.claude/worktrees/agent-aff9549c96fd9f5ff. Not touching other agents' branches or worktrees.
+
 ## 2026-05-28 18:15 CDT - Codex - feature/codex/2175-context-integration
 
 - Status: approved

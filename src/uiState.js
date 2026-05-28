@@ -8,12 +8,21 @@ import {
   getCargoRemaining,
   getCargoUsed,
   getDestinations,
+  getEffectiveCargoCapacity,
+  getEffectivePowerCapacity,
   getMarketPrice,
   getOwnedQuantity,
   getPlanet,
   getTravelCost
 } from "./game.js";
 import { getEncounterChance } from "./travelCombat.js";
+import {
+  canBuyShip,
+  canUpgrade,
+  getShipCatalog,
+  getUpgradeCost,
+  getUpgradeSpec
+} from "./shipyard.js";
 
 export const MAP_MARKER_COLORS = {
   current: "#f4f0e8",
@@ -163,6 +172,71 @@ export function getMapLegendRows() {
     { id: "moderate", label: "Moderate risk", color: MAP_MARKER_COLORS.moderate },
     { id: "high", label: "High risk", color: MAP_MARKER_COLORS.high }
   ];
+}
+
+export function getShipyardView(state) {
+  const planet = getPlanet(state.currentPlanetId);
+  const isIndustrial = planet.industrial === true;
+
+  const currentClassId = state.playerCombatShip?.classId ?? 'vanguard';
+  const effectivePower = getEffectivePowerCapacity(state);
+  const effectiveCargo = getEffectiveCargoCapacity(state);
+  const upgradeLevels = state.shipUpgrades ?? { cargo: 0, power: 0 };
+
+  // Build upgrade options for each kind
+  const cargoSpec = getUpgradeSpec('cargo');
+  const powerSpec = getUpgradeSpec('power');
+  const cargoCost = getUpgradeCost(state, 'cargo');
+  const powerCost = getUpgradeCost(state, 'power');
+  const cargoCheck = canUpgrade(state, 'cargo');
+  const powerCheck = canUpgrade(state, 'power');
+
+  // Build ship catalog rows
+  const catalog = getShipCatalog().map((entry) => {
+    const buyCheck = canBuyShip(state, entry.classId);
+    return {
+      ...entry,
+      isCurrent: entry.classId === currentClassId,
+      canBuy: buyCheck.ok,
+      buyReason: buyCheck.reason,
+      priceLabel: `${new Intl.NumberFormat("en-US").format(entry.price)} cr`
+    };
+  });
+
+  return {
+    isIndustrial,
+    planetName: planet.name,
+    currentShip: {
+      classId: currentClassId,
+      effectivePower,
+      effectiveCargo,
+      cargoUpgradeLevel: upgradeLevels.cargo,
+      powerUpgradeLevel: upgradeLevels.power,
+      cargoUpgradeMax: cargoSpec.max,
+      powerUpgradeMax: powerSpec.max
+    },
+    cargoUpgrade: {
+      currentLevel: upgradeLevels.cargo,
+      max: cargoSpec.max,
+      atMax: cargoCost.atMax ?? false,
+      nextLevel: cargoCost.nextLevel,
+      parts: cargoCost.parts,
+      credits: cargoCost.credits,
+      canUpgrade: cargoCheck.ok,
+      reason: cargoCheck.reason
+    },
+    powerUpgrade: {
+      currentLevel: upgradeLevels.power,
+      max: powerSpec.max,
+      atMax: powerCost.atMax ?? false,
+      nextLevel: powerCost.nextLevel,
+      parts: powerCost.parts,
+      credits: powerCost.credits,
+      canUpgrade: powerCheck.ok,
+      reason: powerCheck.reason
+    },
+    catalog
+  };
 }
 
 function getSliderView(max) {

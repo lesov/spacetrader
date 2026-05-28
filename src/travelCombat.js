@@ -6,7 +6,14 @@ import {
   resolveFullTurn,
   validateAllocation
 } from "./combat/rules.js";
-import { advanceDate, getPlanet, getTravelDurationDays, getTravelCost, serializeCombatShip } from "./game.js";
+import {
+  advanceDate,
+  getPlanet,
+  getTravelDurationDays,
+  getTravelCost,
+  serializeCombatShip,
+  getEffectivePowerCapacity
+} from "./game.js";
 
 export const ENCOUNTER_CHANCE_BY_RISK = {
   low: 0.12,
@@ -102,7 +109,7 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
 
 export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
   const destination = getPlanet(destinationPlanetId);
-  const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, ENEMY_CLASS_ID), state.playerCombatShip);
+  const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, ENEMY_CLASS_ID), state.playerCombatShip, state);
   const seed = Math.floor(rng.next() * 0xffffffff);
   const risk = Math.round(encounter.chance * 100);
   const message = `Hostile contact en route to ${destination.name}. Battle risk was ${risk}%.`;
@@ -320,8 +327,11 @@ export function completeTravel(state, destinationPlanetId, message) {
   );
 }
 
-function rehydratePlayerShip(battle, persistentShip) {
-  const baseShip = buildShipState(persistentShip?.classId ?? PLAYER_CLASS_ID);
+// Rehydrate the player ship for a combat encounter, applying effective power capacity from upgrades.
+function rehydratePlayerShip(battle, persistentShip, gameState) {
+  const classId = persistentShip?.classId ?? PLAYER_CLASS_ID;
+  const effectivePower = gameState ? getEffectivePowerCapacity(gameState) : undefined;
+  const baseShip = buildShipState(classId, effectivePower !== undefined ? { powerCapacity: effectivePower } : {});
   const player = {
     ...baseShip,
     hull: persistentShip?.hull ?? baseShip.hull,

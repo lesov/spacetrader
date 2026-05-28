@@ -1,4 +1,4 @@
-import { PLAYER_CLASS_ID } from "./combat/data.js";
+import { PLAYER_CLASS_ID, SHIP_CLASSES } from "./combat/data.js";
 import { buildShipState } from "./combat/rules.js";
 import { FUEL_RESOURCE_ID, campaign, planets, resources, startingPlayer } from "./data.js";
 
@@ -7,20 +7,51 @@ export const RESOURCE_BY_ID = Object.fromEntries(resources.map((resource) => [re
 export const RESOURCE_IDS = resources.map((resource) => resource.id);
 export const PLANET_IDS = planets.map((planet) => planet.id);
 
+// ── Upgrade constants ─────────────────────────────────────────────────────────
+
+export const CARGO_UPGRADE = { step: 6, max: 4 };
+export const POWER_UPGRADE = { step: 1, max: 4 };
+
+// ── Effective capacity getters ────────────────────────────────────────────────
+
+export function getEffectivePowerCapacity(state) {
+  const classId = state.playerCombatShip?.classId ?? PLAYER_CLASS_ID;
+  const cls = SHIP_CLASSES[classId];
+  return cls.powerCapacity + (state.shipUpgrades?.power ?? 0) * POWER_UPGRADE.step;
+}
+
+export function getEffectiveCargoCapacity(state) {
+  const classId = state.playerCombatShip?.classId ?? PLAYER_CLASS_ID;
+  const cls = SHIP_CLASSES[classId];
+  return cls.cargoCapacity + (state.shipUpgrades?.cargo ?? 0) * CARGO_UPGRADE.step;
+}
+
+// ── State initialization ──────────────────────────────────────────────────────
+
 export function createInitialState() {
   const startingPlanet = getPlanet(startingPlayer.currentPlanetId);
+  const initialShipUpgrades = { cargo: 0, power: 0 };
+  const initialCombatShip = createInitialCombatShip();
+
+  // Build a minimal stub so getEffectiveCargoCapacity can read classId
+  const stub = {
+    playerCombatShip: initialCombatShip,
+    shipUpgrades: initialShipUpgrades
+  };
+
   return {
     credits: startingPlayer.credits,
     currentPlanetId: startingPlayer.currentPlanetId,
     currentDate: campaign.startDate,
     fuel: startingPlayer.fuel,
-    cargoCapacity: startingPlayer.cargoCapacity,
+    cargoCapacity: getEffectiveCargoCapacity(stub),
     cargo: {},
+    shipUpgrades: initialShipUpgrades,
     tradedAtCurrentLocation: false,
     mode: "trade",
     pendingTravel: null,
     combat: null,
-    playerCombatShip: createInitialCombatShip(),
+    playerCombatShip: initialCombatShip,
     messages: [`Docked at ${startingPlanet.name}. ${campaign.startLabel} trading charter initialized.`]
   };
 }
@@ -236,6 +267,9 @@ export function cancelTravelConfirmation(state, destinationPlanetId) {
   };
 }
 
+// Industrial worlds (per lore): Luna, Ganymede, Titan, Mars.
+const INDUSTRIAL_PLANET_IDS = new Set(['luna', 'ganymede', 'titan', 'mars']);
+
 export function validateMarketData() {
   const errors = [];
   const allowedLocationNames = new Set([
@@ -286,6 +320,16 @@ export function validateMarketData() {
 
     if (planet.produces.length !== 3) {
       errors.push(`${planet.name} must produce exactly three resources.`);
+    }
+
+    // Validate industrial flag: must be a boolean and match lore-defined list.
+    if (typeof planet.industrial !== 'boolean') {
+      errors.push(`${planet.name} must define industrial as a boolean.`);
+    } else {
+      const expectedIndustrial = INDUSTRIAL_PLANET_IDS.has(planet.id);
+      if (planet.industrial !== expectedIndustrial) {
+        errors.push(`${planet.name} industrial flag should be ${expectedIndustrial} per lore (got ${planet.industrial}).`);
+      }
     }
 
     for (const resource of resources) {

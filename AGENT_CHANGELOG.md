@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 13:00 CDT - Codex - feature/codex/solar-system-trading-prep
+
+- Status: ready-for-review
+- Summary: Preparing requested MVP changes: travel confirmation when no trade occurred at the current location, slider-based multi-unit buy/sell controls, and conversion of the setting to distant-future Solar System planets and satellites.
+- Files changed: `MVP_EXECUTION_PLAN.md`, `AGENT_CHANGELOG.md`
+- Tests run: Not applicable; planning/prep documentation change.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is isolated in `/tmp/spacetrader-codex-solar-prep` on branch `feature/codex/solar-system-trading-prep`, based on `feature/codex/local-space-trader-mvp`. Another active agent worktree exists at `/tmp/spacetrader-claude-combat-plan` on `docs/claude/combat-mvp-plan`; do not touch it. Future changelog merges must preserve Claude's combat-plan entry.
+
 ## 2026-05-28 12:42 CDT - Codex - feature/codex/local-space-trader-mvp
 
 - Status: ready-for-review

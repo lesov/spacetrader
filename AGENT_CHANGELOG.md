@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-29 00:00 CDT - Claude - feature/claude/ship-upgrades-and-purchasing
+
+- Status: ready-for-review
+- Summary: Implemented ship upgrades (cargo bay expansion + engine/power upgrade), new ship purchasing (falcon/vanguard/bastion/leviathan), and innate per-class base power. All gated to industrial worlds (Luna, Ganymede, Titan, Mars). effectivePoints() function added to combat/rules.js; all combat math now uses base+allocated values. Shipyard UI panel added (visible only in trade mode). Base power innate bonuses visible in allocation UI.
+- Files changed: src/data.js, src/combat/data.js, src/combat/rules.js, src/game.js, src/shipyard.js (new), src/travelCombat.js, src/uiState.js, src/app.js, src/styles.css, index.html, test/shipyard.test.js (new), test/combat.test.js, test/game.test.js, AGENT_CHANGELOG.md
+- Tests run: npm test — 157 tests, 0 fail, 0 skip. node --check passed on all modified modules.
+- UI review: pending-human-test — Shipyard panel, allocation UI base-power display, and ship purchase/upgrade flows require human testing at http://127.0.0.1:4176
+- Blockers or coordination notes: Work committed on branch feature/claude/ship-upgrades-and-purchasing (commit a7a2f32). Server running at http://127.0.0.1:4176. No merge to main without explicit human approval. Did not touch other agents' worktrees or branches.
+
 ## 2026-05-28 19:00 CDT - Claude - feature/claude/ship-upgrades-and-purchasing
 
 - Status: started

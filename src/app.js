@@ -1,14 +1,17 @@
 import { resources } from "./data.js";
 import {
   buyResource,
+  buyEmergencyFuelForTravel,
   cancelTravelConfirmation,
   createInitialState,
   getPlanet,
   sellResource
 } from "./game.js";
 import {
+  applyBattleOutcome,
   beginTravel,
   prepareCombatActionPhase,
+  previewVictoryLoot,
   resolveIntegratedBattleTurn,
   setPlayerAllocation,
   updatePlayerAllocation
@@ -19,6 +22,7 @@ import {
   getDestinationRows,
   getMapLegendRows,
   getMarketRows,
+  getNewsRows,
   getPlanetMapView,
   getProjectedMapView,
   getShipyardView,
@@ -38,8 +42,11 @@ import {
   formatHull,
   formatShield,
   getWeaponRows,
+  getPresetEditorAllocation,
+  getPresetSliderState,
   isAllocationValid,
   phaseLabel,
+  setCombatPresetAllocation,
   systemTooltip
 } from "./combat/uiState.js";
 
@@ -79,6 +86,7 @@ const elements = {
   marketContext: document.querySelector("#market-context"),
   cargoList: document.querySelector("#cargo-list"),
   cargoContext: document.querySelector("#cargo-context"),
+  newsList: document.querySelector("#news-list"),
   messageLog: document.querySelector("#message-log"),
   resetButton: document.querySelector("#reset-button"),
   travelDialog: document.querySelector("#travel-confirmation"),
@@ -110,6 +118,7 @@ const elements = {
   battleEndPanel: document.querySelector("#battle-end-panel"),
   resultHeading: document.querySelector("#result-heading"),
   resultSubtext: document.querySelector("#result-subtext"),
+  continueFromBattle: document.querySelector("#continue-from-battle"),
   combatLog: document.querySelector("#combat-log")
 };
 
@@ -123,6 +132,8 @@ const stars = Array.from({ length: 90 }, (_, index) => ({
 
 elements.resetButton.addEventListener("click", resetRun);
 elements.gameOverReset.addEventListener("click", resetRun);
+elements.continueFromBattle.addEventListener("click", () => applyResult(applyBattleOutcome(state)));
+document.addEventListener("keydown", handleBattleHotkey);
 
 function resetRun() {
   pendingTravel = null;
@@ -188,6 +199,7 @@ function renderTrade() {
   renderMapLegend();
   renderMarket();
   renderCargo();
+  renderNews();
   renderShipyard();
   renderLog();
   drawMap();
@@ -227,13 +239,29 @@ function renderPlanetPanel() {
 
   elements.destinations.replaceChildren(
     ...getDestinationRows(state).map((destination) => {
+      const row = document.createElement("div");
+      row.className = "destination-row";
+
       const button = document.createElement("button");
       button.type = "button";
       button.className = "destination-button";
       button.disabled = !destination.canTravel;
       button.innerHTML = `<span>${destination.name}<small>${destination.type} | ${destination.factionAlignment} | ${destination.riskLevel} risk | ${destination.encounterRiskLabel}</small></span><strong>${destination.fuelCost} fuel | ${destination.travelDurationLabel}</strong>`;
       button.addEventListener("click", () => handleTravel(destination.id));
-      return button;
+      row.appendChild(button);
+
+      if (!destination.canTravel && destination.emergencyFuel.neededFuel > 0) {
+        const fuelButton = document.createElement("button");
+        fuelButton.type = "button";
+        fuelButton.className = "emergency-fuel-btn";
+        fuelButton.disabled = !destination.emergencyFuel.canAfford;
+        fuelButton.innerHTML = `<span>Emergency Fuel</span><small>${destination.emergencyFuel.neededFuel} fuel | ${destination.emergencyFuel.totalLabel}</small>`;
+        fuelButton.title = `Costs ${destination.emergencyFuel.unitPriceLabel} per fuel, five times the local market rate.`;
+        fuelButton.addEventListener("click", () => applyResult(buyEmergencyFuelForTravel(state, destination.id)));
+        row.appendChild(fuelButton);
+      }
+
+      return row;
     })
   );
 }
@@ -289,6 +317,17 @@ function renderCargo() {
     return item;
   });
   elements.cargoList.replaceChildren(...rows);
+}
+
+function renderNews() {
+  const rows = getNewsRows(state);
+  elements.newsList.replaceChildren(
+    ...rows.map((row) => {
+      const item = document.createElement("li");
+      item.innerHTML = `<strong>${row.headline}</strong><span>${row.dateRange}</span><p>${row.body}</p>`;
+      return item;
+    })
+  );
 }
 
 function renderShipyard() {
@@ -462,13 +501,43 @@ function renderAllocation(player) {
   elements.endAllocation.disabled = !isAllocationValid(player);
 
   elements.presetRow.replaceChildren(
-    ...PRESETS.map((preset) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "preset-btn";
-      button.textContent = preset.label;
-      button.addEventListener("click", () => handleCombatPreset(preset.weights));
-      return button;
+    ...(state.combatPresets ?? PRESETS).map((preset) => {
+      const card = document.createElement("div");
+      card.className = "preset-card";
+
+      const applyButton = document.createElement("button");
+      applyButton.type = "button";
+      applyButton.className = "preset-btn";
+      applyButton.textContent = preset.label;
+      const presetAllocation = getPresetEditorAllocation(preset, player.powerCapacity);
+      const presetComplete = Object.values(presetAllocation).reduce((sum, value) => sum + value, 0) === player.powerCapacity;
+      applyButton.disabled = !presetComplete;
+      applyButton.addEventListener("click", () => handleCombatPreset(presetAllocation));
+
+      const controls = document.createElement("div");
+      controls.className = "preset-controls";
+      controls.replaceChildren(
+        ...SYSTEMS.map((system) => {
+          const slider = getPresetSliderState(preset, player.powerCapacity, system);
+          const label = document.createElement("label");
+          label.className = "preset-weight";
+          label.innerHTML = `<span>${SYSTEM_LABELS[system]}</span><input type="range" min="0" max="${slider.max}" step="1" value="${slider.value}" aria-label="${preset.label} ${SYSTEM_LABELS[system]} power"><output>${slider.value}</output>`;
+          const input = label.querySelector("input");
+          const output = label.querySelector("output");
+          input.addEventListener("input", () => {
+            output.textContent = input.value;
+            state = {
+              ...state,
+              combatPresets: setCombatPresetAllocation(state.combatPresets ?? PRESETS, preset.label, system, input.value, player.powerCapacity)
+            };
+          });
+          input.addEventListener("change", render);
+          return label;
+        })
+      );
+
+      card.append(applyButton, controls);
+      return card;
     })
   );
 
@@ -544,7 +613,6 @@ function renderActions(player) {
   });
 
   actionButtons.push(makeActionButton("Brace", "brace", { type: "brace" }, "Apply shield regen a second time this turn."));
-  actionButtons.push(makeActionButton("Hold", "hold", { type: "hold" }, "Take no action this turn."));
 
   const chance = Math.round(runAwayChance(player) * 100);
   const runButton = document.createElement("button");
@@ -562,11 +630,22 @@ function renderBattleEnd(winner) {
   const label = battleResultLabel(winner);
   elements.resultHeading.textContent = label;
   elements.resultHeading.className = `result-heading ${winner}`;
-  elements.resultSubtext.textContent =
-    winner === "player" ? "The route is clear. Salvage has been recovered." :
-    winner === "enemy" ? "Your hull gives out before reaching port." :
-    winner === "draw" ? "Mutual destruction ends the run." :
-    winner === "escaped" ? "You jump clear and continue toward port." : "";
+
+  if (winner === "player") {
+    const loot = previewVictoryLoot(state);
+    const partsText = loot && loot.parts > 0 ? `, ${loot.parts} Ship Parts` : "";
+    elements.resultSubtext.textContent = loot
+      ? `Salvage: ${loot.credits} credits${partsText}. Press Continue to dock.`
+      : "The route is clear. Press Continue to dock.";
+  } else if (winner === "escaped") {
+    elements.resultSubtext.textContent = "You jump clear. Press Continue to continue toward port.";
+  } else if (winner === "enemyEscaped") {
+    elements.resultSubtext.textContent = "The hostile ship escapes. Press Continue to dock.";
+  } else if (winner === "enemy") {
+    elements.resultSubtext.textContent = "Your hull gives out before reaching port.";
+  } else if (winner === "draw") {
+    elements.resultSubtext.textContent = "Mutual destruction ends the run.";
+  }
 }
 
 function renderGameOver() {
@@ -648,6 +727,65 @@ function handleCombatPreset(weights) {
 
 function handleCombatAction(action) {
   applyResult(resolveIntegratedBattleTurn(state, action, rng));
+}
+
+function handleBattleHotkey(event) {
+  if (event.repeat || state.mode !== "combat" || shouldIgnoreHotkey(event.target)) {
+    return;
+  }
+
+  const battle = state.combat?.battle;
+  if (!battle) return;
+
+  const key = event.key.toLowerCase();
+  if (battle.phase === "allocate") {
+    if (key === "enter" && !elements.endAllocation.disabled) {
+      event.preventDefault();
+      applyResult(prepareCombatActionPhase(state, rng));
+      return;
+    }
+
+    const presetByKey = { a: "Attack", b: "Balanced", d: "Defend", e: "Evasive" };
+    if (presetByKey[key]) {
+      const preset = (state.combatPresets ?? PRESETS).find((entry) => entry.label === presetByKey[key]);
+      if (preset) {
+        const allocation = getPresetEditorAllocation(preset, battle.player.powerCapacity);
+        const total = Object.values(allocation).reduce((sum, value) => sum + value, 0);
+        if (total === battle.player.powerCapacity) {
+          event.preventDefault();
+          handleCombatPreset(allocation);
+        }
+      }
+    }
+    return;
+  }
+
+  if (battle.phase === "action") {
+    if (key === "b") {
+      event.preventDefault();
+      handleCombatAction({ type: "brace" });
+      return;
+    }
+
+    if (key === "r") {
+      event.preventDefault();
+      handleCombatAction({ type: "run" });
+      return;
+    }
+
+    if (key === "f" || key === "a") {
+      const weapon = getWeaponRows(battle.player).find((row) => row.available);
+      if (weapon) {
+        event.preventDefault();
+        handleCombatAction({ type: "fire", weaponId: weapon.id });
+      }
+    }
+  }
+}
+
+function shouldIgnoreHotkey(target) {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  return target.closest("input, textarea, select, button, dialog[open]");
 }
 
 function makeActionButton(label, className, action, title) {

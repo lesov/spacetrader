@@ -24,6 +24,7 @@ export function buildShipState(classId, overrides = {}) {
     shieldRegen: cls.shieldRegen,
     repairRate: cls.repairRate,
     weapons: cls.weapons.map(w => ({ ...w, cooldownRemaining: 0 })),
+    hullDamageTaken: 0,
     allocation: { weapons: 0, shields: 0, engines: 0, sensors: 0, repair: 0 }
   };
   return { ...base, ...overrides };
@@ -85,13 +86,13 @@ export function resolveFullTurn(state, playerAction, aiAction, rng) {
   let enemy = state.enemy;
 
   // 1. Shield regen (both sides)
-  player = applyShieldRegen(player);
+  player = applyShieldRegen(player, rng, 'player', turn, newLog);
   const playerShieldGained = player.shield - state.player.shield;
   if (playerShieldGained > 0) {
     newLog.push(`Turn ${turn} — Your shields restored ${playerShieldGained} (${player.shield}/${player.shieldMax}).`);
   }
 
-  enemy = applyShieldRegen(enemy);
+  enemy = applyShieldRegen(enemy, rng, 'enemy', turn, newLog);
   const enemyShieldGained = enemy.shield - state.enemy.shield;
   if (enemyShieldGained > 0) {
     newLog.push(`Turn ${turn} — Enemy shields restored ${enemyShieldGained} (${enemy.shield}/${enemy.shieldMax}).`);
@@ -115,12 +116,12 @@ export function resolveFullTurn(state, playerAction, aiAction, rng) {
   // 3. Brace (applies extra shield regen equal to one allocation worth)
   if (playerAction.type === 'brace') {
     const before = player.shield;
-    player = applyShieldRegen(player);
+    player = applyShieldRegen(player, rng, 'player', turn, newLog);
     const extra = player.shield - before;
     newLog.push(`Turn ${turn} — You brace: emergency power to shields${extra > 0 ? `, +${extra} shields` : ''}.`);
   }
   if (aiAction.type === 'brace') {
-    enemy = applyShieldRegen(enemy);
+    enemy = applyShieldRegen(enemy, rng, 'enemy', turn, newLog);
   }
 
   // 3b. Run-away attempt (replaces player weapon fire; enemy still fires a parting shot)
@@ -143,17 +144,29 @@ export function resolveFullTurn(state, playerAction, aiAction, rng) {
     player = result.attacker;
     enemy = result.defender;
     newLog.push(...result.log);
-    playerFired.push(playerAction.weaponId);
+    if (result.fired) playerFired.push(playerAction.weaponId);
   }
 
-  // 5. Resolve AI weapon
+  // 5. Enemy escape or weapon action
+  let enemyEscaped = false;
+  if (!escaped && aiAction.type === 'run') {
+    const chance = runAwayChance(enemy);
+    const roll = rng.next();
+    if (roll < chance) {
+      enemyEscaped = true;
+      newLog.push(`Turn ${turn} — Enemy emergency burn succeeded (${pct(chance)} chance). Hostile ship escaped.`);
+    } else {
+      newLog.push(`Turn ${turn} — Enemy escape failed (${pct(chance)} chance).`);
+    }
+  }
+
   const enemyFired = [];
-  if (aiAction.type === 'fire') {
+  if (!escaped && !enemyEscaped && aiAction.type === 'fire') {
     const result = resolveWeaponFire('enemy', enemy, player, aiAction.weaponId, rng, turn);
     enemy = result.attacker;
     player = result.defender;
     newLog.push(...result.log);
-    enemyFired.push(aiAction.weaponId);
+    if (result.fired) enemyFired.push(aiAction.weaponId);
   }
 
   // 6. Advance cooldowns and ammo for all weapons
@@ -166,6 +179,10 @@ export function resolveFullTurn(state, playerAction, aiAction, rng) {
     winner = player.hull > 0 ? 'escaped' : 'enemy';
     if (winner === 'escaped') newLog.push(`Turn ${turn} — You've jumped to safety. Battle over.`);
     else newLog.push(`Turn ${turn} — Destroyed during escape attempt. Defeat.`);
+  } else if (enemyEscaped) {
+    winner = enemy.hull > 0 ? 'enemyEscaped' : 'player';
+    if (winner === 'enemyEscaped') newLog.push(`Turn ${turn} — Enemy escaped. Battle over.`);
+    else newLog.push(`Turn ${turn} — Victory! Enemy ship failed its escape.`);
   } else {
     winner = checkBattleEnd(player, enemy);
     if (winner === 'player') newLog.push(`Turn ${turn} — Victory! Enemy ship destroyed.`);
@@ -186,8 +203,16 @@ export function resolveFullTurn(state, playerAction, aiAction, rng) {
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
-function applyShieldRegen(ship) {
-  const gained = ship.shieldRegen * effectivePoints(ship, 'shields');
+function applyShieldRegen(ship, rng, side, turn, log) {
+  const points = effectivePoints(ship, 'shields');
+  if (points <= 0) return ship;
+
+  if (rollMalfunction(ship, rng)) {
+    log.push(`Turn ${turn} — ${side === 'player' ? 'Your' : 'Enemy'} shield grid malfunctioned; no shield repair this pulse.`);
+    return ship;
+  }
+
+  const gained = ship.shieldRegen * points;
   return { ...ship, shield: Math.min(ship.shieldMax, ship.shield + gained) };
 }
 
@@ -198,27 +223,29 @@ function applyHullRepair(ship) {
 
 function resolveWeaponFire(side, attacker, defender, weaponId, rng, turn) {
   const weapon = attacker.weapons.find(w => w.id === weaponId);
-  if (!weapon || !isWeaponAvailable(weapon)) return { attacker, defender, log: [] };
+  if (!weapon || !isWeaponAvailable(weapon)) return { attacker, defender, log: [], fired: false };
 
-  const hitChance = clamp(
-    attacker.baseAccuracy
-    + effectivePoints(attacker, 'sensors') * SENSORS_ACCURACY_PER_POINT
-    + weapon.accuracyMod
-    - defender.baseEvasion
-    - effectivePoints(defender, 'engines') * ENGINES_EVASION_PER_POINT,
-    0.05, 0.95
-  );
+  const who = side === 'player' ? 'You' : 'Enemy';
+  if (rollMalfunction(attacker, rng)) {
+    return {
+      attacker,
+      defender,
+      log: [`Turn ${turn} — ${who} tried to fire ${weapon.name}, but a hull-damage malfunction kept the weapon offline.`],
+      fired: false
+    };
+  }
+
+  const hitChance = calculateHitChance(attacker, defender, weapon);
 
   const roll = rng.next();
   const hit = roll < hitChance;
-
-  const who = side === 'player' ? 'You' : 'Enemy';
 
   if (!hit) {
     return {
       attacker,
       defender,
-      log: [`Turn ${turn} — ${who} fired ${weapon.name}: MISS.`]
+      log: [`Turn ${turn} — ${who} fired ${weapon.name}: MISS.`],
+      fired: true
     };
   }
 
@@ -233,6 +260,7 @@ function resolveWeaponFire(side, attacker, defender, weaponId, rng, turn) {
 
   const hullBefore = defender.hull;
   const hullAfter = Math.max(0, defender.hull - hullDamage);
+  const actualHullDamage = hullBefore - hullAfter;
 
   const totalShown = (shieldBefore - shieldAfter) + (hullBefore - hullAfter);
   const log = [
@@ -241,9 +269,26 @@ function resolveWeaponFire(side, attacker, defender, weaponId, rng, turn) {
 
   return {
     attacker,
-    defender: { ...defender, shield: shieldAfter, hull: hullAfter },
-    log
+    defender: {
+      ...defender,
+      shield: shieldAfter,
+      hull: hullAfter,
+      hullDamageTaken: (defender.hullDamageTaken ?? 0) + actualHullDamage
+    },
+    log,
+    fired: true
   };
+}
+
+export function calculateHitChance(attacker, defender, weapon) {
+  return clamp(
+    attacker.baseAccuracy
+    + effectivePoints(attacker, 'sensors') * SENSORS_ACCURACY_PER_POINT
+    + weapon.accuracyMod
+    - defender.baseEvasion * 0.5
+    - effectivePoints(defender, 'engines') * ENGINES_EVASION_PER_POINT,
+    0.18, 0.95
+  );
 }
 
 // After firing: set cooldownRemaining = cooldownTurns for fired weapons.
@@ -276,10 +321,24 @@ export function checkBattleEnd(player, enemy) {
 
 // Escape chance: effective engines×12% + effective sensors×5%, clamped to [5%, 80%].
 export function runAwayChance(player) {
-  return clamp(
+  const baseChance = clamp(
     effectivePoints(player, 'engines') * 0.12 + effectivePoints(player, 'sensors') * 0.05,
     0.05, 0.80
   );
+  const hullRatio = player.hullMax > 0 ? clamp(player.hull / player.hullMax, 0, 1) : 1;
+  return clamp(baseChance * (0.35 + hullRatio * 0.65), 0.03, 0.80);
+}
+
+export function malfunctionChance(ship) {
+  const damageTaken = ship.hullDamageTaken ?? 0;
+  if (damageTaken <= 0) return 0;
+  const ratio = ship.hullMax > 0 ? damageTaken / ship.hullMax : 0;
+  return clamp(0.06 + ratio * 0.24, 0.06, 0.34);
+}
+
+function rollMalfunction(ship, rng) {
+  const chance = malfunctionChance(ship);
+  return chance > 0 && rng.next() < chance;
 }
 
 function clamp(value, min, max) {

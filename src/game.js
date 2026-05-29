@@ -1,6 +1,8 @@
 import { PLAYER_CLASS_ID, SHIP_CLASSES } from "./combat/data.js";
 import { buildShipState } from "./combat/rules.js";
+import { cloneCombatPresets } from "./combat/uiState.js";
 import { FUEL_RESOURCE_ID, campaign, planets, resources, startingPlayer } from "./data.js";
+import { applyMarketModifier, getMarketModifier } from "./events.js";
 
 export const PLANET_BY_ID = Object.fromEntries(planets.map((planet) => [planet.id, planet]));
 export const RESOURCE_BY_ID = Object.fromEntries(resources.map((resource) => [resource.id, resource]));
@@ -46,6 +48,7 @@ export function createInitialState() {
     fuel: startingPlayer.fuel,
     cargoCapacity: getEffectiveCargoCapacity(stub),
     cargo: {},
+    combatPresets: cloneCombatPresets(),
     shipUpgrades: initialShipUpgrades,
     tradedAtCurrentLocation: false,
     mode: "trade",
@@ -89,14 +92,35 @@ export function isFuel(resourceId) {
   return resourceId === FUEL_RESOURCE_ID;
 }
 
-export function getMarketPrice(planetId, resourceId) {
+export const EMERGENCY_FUEL_MULTIPLIER = 5;
+
+export function getMarketPrice(planetId, resourceId, dateText = campaign.startDate) {
   const planet = getPlanet(planetId);
   getResource(resourceId);
   const range = planet.priceRanges[resourceId];
   if (!range) {
     throw new Error(`Missing price range for ${resourceId} on ${planetId}`);
   }
-  return Math.round((range.min + range.max) / 2);
+  const basePrice = Math.round((range.min + range.max) / 2);
+  return applyMarketModifier(basePrice, getMarketModifier(dateText, planetId, resourceId));
+}
+
+export function getEmergencyFuelQuote(state, destinationPlanetId) {
+  const destination = getPlanet(destinationPlanetId);
+  if (destination.id === state.currentPlanetId) {
+    return { neededFuel: 0, unitPrice: 0, total: 0, canAfford: true };
+  }
+
+  const travelCost = getTravelCost(state.currentPlanetId, destination.id);
+  const neededFuel = Math.max(0, travelCost - state.fuel);
+  const unitPrice = getMarketPrice(state.currentPlanetId, FUEL_RESOURCE_ID, state.currentDate) * EMERGENCY_FUEL_MULTIPLIER;
+  const total = neededFuel * unitPrice;
+  return {
+    neededFuel,
+    unitPrice,
+    total,
+    canAfford: neededFuel > 0 && state.credits >= total
+  };
 }
 
 export function getCargoUsed(state) {
@@ -151,7 +175,7 @@ export function buyResource(state, resourceId, quantity) {
   }
 
   const resource = getResource(resourceId);
-  const price = getMarketPrice(state.currentPlanetId, resourceId);
+  const price = getMarketPrice(state.currentPlanetId, resourceId, state.currentDate);
   const total = price * quantity;
   if (state.credits < total) {
     return fail(state, `Need ${formatNumber(total)} credits to buy ${quantity} ${resource.name}.`);
@@ -193,17 +217,31 @@ export function sellResource(state, resourceId, quantity) {
     return fail(state, validationError);
   }
 
+  const resource = getResource(resourceId);
+  const price = getMarketPrice(state.currentPlanetId, resourceId, state.currentDate);
+
   if (isFuel(resourceId)) {
-    return fail(state, "Fuel is stored in tanks and cannot be sold in this MVP.");
+    if (state.fuel < quantity) {
+      return fail(state, `Only ${state.fuel} ${resource.name} available to sell.`);
+    }
+
+    const total = price * quantity;
+    return succeed(
+      {
+        ...state,
+        credits: state.credits + total,
+        fuel: state.fuel - quantity,
+        tradedAtCurrentLocation: true
+      },
+      `Sold ${quantity} ${resource.name} for ${formatNumber(total)} credits.`
+    );
   }
 
-  const resource = getResource(resourceId);
   const owned = getOwnedQuantity(state, resourceId);
   if (owned < quantity) {
     return fail(state, `Only ${owned} ${resource.name} available to sell.`);
   }
 
-  const price = getMarketPrice(state.currentPlanetId, resourceId);
   const total = price * quantity;
   const nextCargo = { ...state.cargo, [resourceId]: owned - quantity };
   if (nextCargo[resourceId] === 0) {
@@ -218,6 +256,32 @@ export function sellResource(state, resourceId, quantity) {
       cargo: nextCargo
     },
     `Sold ${quantity} ${resource.name} for ${formatNumber(total)} credits.`
+  );
+}
+
+export function buyEmergencyFuelForTravel(state, destinationPlanetId) {
+  const destination = getPlanet(destinationPlanetId);
+  const quote = getEmergencyFuelQuote(state, destination.id);
+
+  if (quote.neededFuel <= 0) {
+    return fail(state, `Fuel tanks already cover the route to ${destination.name}.`);
+  }
+
+  if (state.credits < quote.total) {
+    return fail(
+      state,
+      `Emergency fuel to ${destination.name} requires ${formatNumber(quote.total)} credits (${quote.neededFuel} fuel at ${formatNumber(quote.unitPrice)} each).`
+    );
+  }
+
+  return succeed(
+    {
+      ...state,
+      credits: state.credits - quote.total,
+      fuel: state.fuel + quote.neededFuel,
+      tradedAtCurrentLocation: true
+    },
+    `Emergency fueling bought ${quote.neededFuel} fuel for ${formatNumber(quote.total)} credits.`
   );
 }
 

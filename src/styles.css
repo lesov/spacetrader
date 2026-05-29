@@ -73,6 +73,7 @@ button:disabled {
 .planet-panel,
 .market-panel,
 .cargo-panel,
+.news-panel,
 .log-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -310,6 +311,11 @@ h3 {
   gap: 8px;
 }
 
+.destination-row {
+  display: grid;
+  gap: 6px;
+}
+
 .destination-button {
   display: flex;
   justify-content: space-between;
@@ -317,6 +323,21 @@ h3 {
   min-height: 44px;
   padding: 9px 10px;
   text-align: left;
+}
+
+.emergency-fuel-btn {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-color: rgba(247, 185, 85, 0.62);
+  color: var(--amber);
+  text-align: left;
+}
+
+.emergency-fuel-btn small {
+  color: var(--muted);
 }
 
 .destination-button strong {
@@ -339,6 +360,7 @@ h3 {
 
 .market-panel,
 .cargo-panel,
+.news-panel,
 .log-panel {
   padding: 16px;
 }
@@ -434,7 +456,7 @@ h3 {
 
 .side-stack {
   display: grid;
-  grid-template-rows: auto minmax(220px, 1fr);
+  grid-template-rows: auto auto minmax(220px, 1fr);
   gap: 18px;
 }
 
@@ -455,6 +477,37 @@ h3 {
 
 .cargo-row strong {
   color: var(--teal);
+}
+
+.news-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.news-list li {
+  color: var(--muted);
+}
+
+.news-list strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.news-list span {
+  display: block;
+  margin-top: 2px;
+  color: var(--amber);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.news-list p {
+  margin-top: 4px;
+  line-height: 1.35;
+  font-size: 0.82rem;
 }
 
 #reset-button {
@@ -575,6 +628,7 @@ h3 {
   .planet-panel,
   .market-panel,
   .cargo-panel,
+  .news-panel,
   .log-panel {
     padding: 12px;
   }

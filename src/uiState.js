@@ -8,6 +8,7 @@ import {
   getCargoRemaining,
   getCargoUsed,
   getDestinations,
+  getEmergencyFuelQuote,
   getEffectiveCargoCapacity,
   getEffectivePowerCapacity,
   getMarketPrice,
@@ -15,6 +16,7 @@ import {
   getPlanet,
   getTravelCost
 } from "./game.js";
+import { getActiveMarketEvents, getMarketModifier } from "./events.js";
 import { getEncounterChance } from "./travelCombat.js";
 import {
   canBuyShip,
@@ -80,19 +82,21 @@ export function getStatusView(state) {
 export function getMarketRows(state) {
   const planet = getPlanet(state.currentPlanetId);
   return resources.map((resource) => {
-    const price = getMarketPrice(planet.id, resource.id);
+    const price = getMarketPrice(planet.id, resource.id, state.currentDate);
+    const modifierPercent = getMarketModifier(state.currentDate, planet.id, resource.id);
     const owned = resource.id === FUEL_RESOURCE_ID ? state.fuel : getOwnedQuantity(state, resource.id);
     const affordableQuantity = Math.floor(state.credits / price);
     const buyMax = resource.id === FUEL_RESOURCE_ID
       ? affordableQuantity
       : Math.min(affordableQuantity, getCargoRemaining(state));
-    const sellMax = resource.id === FUEL_RESOURCE_ID ? 0 : owned;
+    const sellMax = owned;
 
     return {
       id: resource.id,
       name: resource.name,
       price,
-      priceLabel: formatCredits(price),
+      priceLabel: `${formatCredits(price)}${formatModifier(modifierPercent)}`,
+      modifierPercent,
       owned,
       producedHere: planet.produces.includes(resource.id),
       buyMax,
@@ -106,20 +110,29 @@ export function getMarketRows(state) {
 }
 
 export function getDestinationRows(state) {
-  return getDestinations(state.currentPlanetId).map((planet) => ({
-    id: planet.id,
-    name: planet.name,
-    type: planet.type,
-    factionAlignment: planet.factionAlignment,
-    riskLevel: planet.riskLevel,
-    fuelCost: getTravelCost(state.currentPlanetId, planet.id),
-    encounterChance: getEncounterChance(state, planet.id),
-    encounterRiskLabel: `${Math.round(getEncounterChance(state, planet.id) * 100)}% battle risk`,
-    travelDurationDays: planet.travelDurationDays,
-    travelDurationLabel: formatDuration(planet.travelDurationDays),
-    canTravel: state.fuel >= getTravelCost(state.currentPlanetId, planet.id),
-    requiresConfirmation: !state.tradedAtCurrentLocation
-  }));
+  return getDestinations(state.currentPlanetId).map((planet) => {
+    const fuelCost = getTravelCost(state.currentPlanetId, planet.id);
+    const emergencyFuel = getEmergencyFuelQuote(state, planet.id);
+    return {
+      id: planet.id,
+      name: planet.name,
+      type: planet.type,
+      factionAlignment: planet.factionAlignment,
+      riskLevel: planet.riskLevel,
+      fuelCost,
+      encounterChance: getEncounterChance(state, planet.id),
+      encounterRiskLabel: `${Math.round(getEncounterChance(state, planet.id) * 100)}% battle risk`,
+      travelDurationDays: planet.travelDurationDays,
+      travelDurationLabel: formatDuration(planet.travelDurationDays),
+      canTravel: state.fuel >= fuelCost,
+      requiresConfirmation: !state.tradedAtCurrentLocation,
+      emergencyFuel: {
+        ...emergencyFuel,
+        totalLabel: formatCredits(emergencyFuel.total),
+        unitPriceLabel: formatCredits(emergencyFuel.unitPrice)
+      }
+    };
+  });
 }
 
 export function getCargoRows(state) {
@@ -130,6 +143,15 @@ export function getCargoRows(state) {
       name: resource.name,
       quantity: getOwnedQuantity(state, resource.id)
     }));
+}
+
+export function getNewsRows(state) {
+  return getActiveMarketEvents(state.currentDate).map((event) => ({
+    id: event.id,
+    headline: event.headline,
+    body: event.body,
+    dateRange: `${formatDate(event.startsOn)} - ${formatDate(event.endsOn)}`
+  }));
 }
 
 export function getPlanetMapView(state) {
@@ -247,6 +269,11 @@ function getSliderView(max) {
     disabled: max <= 0,
     label: max > 0 ? "1" : "0"
   };
+}
+
+function formatModifier(modifierPercent) {
+  if (modifierPercent === 0) return "";
+  return modifierPercent > 0 ? ` +${modifierPercent}%` : ` ${modifierPercent}%`;
 }
 
 function getMapBounds(mapPlanets) {

@@ -1,5 +1,5 @@
-export const ENGINES_EVASION_PER_POINT = 0.05;
-export const SENSORS_ACCURACY_PER_POINT = 0.05;
+export const ENGINES_EVASION_PER_POINT = 0.025;
+export const SENSORS_ACCURACY_PER_POINT = 0.045;
 
 // Brace action: applies shield regen one extra time this turn.
 // (Defined here so tests can reference it alongside other constants.)

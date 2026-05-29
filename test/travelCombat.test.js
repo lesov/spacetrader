@@ -135,9 +135,8 @@ test("victory completes travel, awards salvage, and restores docked shields", ()
     }
   };
 
-  // Deterministic salvage rng: roll 0.5 each → vanguard credits=250, parts=4
-  // vanguard: creditsMin=150 creditsMax=350 partsMin=2 partsMax=5
-  // credits = 150 + floor(0.5 * 201) = 250; parts = 2 + floor(0.5 * 4) = 4
+  // Deterministic salvage rng: roll 0.5 each → vanguard credits=950, parts=8
+  // vanguard: creditsMin=700 creditsMax=1200 partsMin=5 partsMax=10
   const result = applyBattleOutcome(
     { ...state, combat: { ...state.combat, battle } },
     sequenceRng([0.5, 0.5])
@@ -146,8 +145,8 @@ test("victory completes travel, awards salvage, and restores docked shields", ()
   assert.equal(result.ok, true);
   assert.equal(result.state.mode, "trade");
   assert.equal(result.state.currentPlanetId, "europa");
-  assert.equal(result.state.credits, 1000 + 250);
-  assert.equal(result.state.cargo.shipParts, 4);
+  assert.equal(result.state.credits, 1000 + 950);
+  assert.equal(result.state.cargo.shipParts, 8);
   assert.equal(result.state.currentDate, advanceDate(state.currentDate, state.pendingTravel.travelDurationDays));
   assert.equal(result.state.playerCombatShip.hull, 52);
   assert.equal(result.state.playerCombatShip.shield, battle.player.shieldMax);
@@ -250,6 +249,69 @@ test("cargo and credits are unchanged by combat escape", () => {
   assert.equal(result.state.credits, 777);
 });
 
+test("enemy escape completes travel without salvage", () => {
+  const state = beginTravel(tradedState(), "europa", {}, sequenceRng([0, 0.5])).state;
+  const battle = {
+    ...state.combat.battle,
+    phase: "ended",
+    winner: "enemyEscaped",
+    player: {
+      ...state.combat.battle.player,
+      hull: 78
+    }
+  };
+
+  const result = applyBattleOutcome({
+    ...state,
+    combat: {
+      ...state.combat,
+      battle
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.mode, "trade");
+  assert.equal(result.state.currentPlanetId, "europa");
+  assert.equal(result.state.credits, 1000);
+  assert.equal(result.state.cargo.shipParts, undefined);
+});
+
+test("cargo can be lost after battle only when hull damage was sustained", () => {
+  const state = beginTravel({
+    ...tradedState(),
+    cargo: { metals: 6, water: 4 }
+  }, "europa", {}, sequenceRng([0, 0.5])).state;
+
+  const damagedBattle = {
+    ...state.combat.battle,
+    phase: "ended",
+    winner: "escaped",
+    player: {
+      ...state.combat.battle.player,
+      hullDamageTaken: 60
+    }
+  };
+
+  const damagedResult = applyBattleOutcome(
+    { ...state, combat: { ...state.combat, battle: damagedBattle } },
+    sequenceRng([0.01, 0.5])
+  );
+
+  assert.ok((damagedResult.state.cargo.metals ?? 0) + (damagedResult.state.cargo.water ?? 0) < 10);
+  assert.match(damagedResult.message, /Cargo lost/);
+
+  const cleanBattle = {
+    ...damagedBattle,
+    player: { ...damagedBattle.player, hullDamageTaken: 0 }
+  };
+  const cleanResult = applyBattleOutcome(
+    { ...state, combat: { ...state.combat, battle: cleanBattle } },
+    sequenceRng([0.01, 0.5])
+  );
+
+  assert.deepEqual(cleanResult.state.cargo, { metals: 6, water: 4 });
+});
+
 test("destination rows expose encounter risk labels", () => {
   const rows = getDestinationRows(createInitialState());
 
@@ -294,18 +356,16 @@ test("victory awards more credits and parts for bastion than for falcon", () => 
     { ...falconState, combat: { ...falconState.combat, battle: endedBattle(falconState) } },
     sequenceRng([0.5, 0.5])
   );
-  // falcon: 50 + floor(0.5 * 101)=50 → 100 credits; 1 + floor(0.5 * 3)=1 → 2 parts
-  assert.equal(falconResult.state.credits, 1000 + 100);
-  assert.equal(falconResult.state.cargo.shipParts, 2);
+  assert.equal(falconResult.state.credits, 1000 + 525);
+  assert.equal(falconResult.state.cargo.shipParts, 5);
 
   const bastionState = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.95, 0.5])).state;
   const bastionResult = applyBattleOutcome(
     { ...bastionState, combat: { ...bastionState.combat, battle: endedBattle(bastionState) } },
     sequenceRng([0.5, 0.5])
   );
-  // bastion: 350 + floor(0.5 * 351)=175 → 525 credits; 5 + floor(0.5 * 5)=2 → 7 parts
-  assert.equal(bastionResult.state.credits, 1000 + 525);
-  assert.equal(bastionResult.state.cargo.shipParts, 7);
+  assert.equal(bastionResult.state.credits, 1000 + 1900);
+  assert.equal(bastionResult.state.cargo.shipParts, 14);
 
   assert.ok(bastionResult.state.credits > falconResult.state.credits);
   assert.ok(bastionResult.state.cargo.shipParts > falconResult.state.cargo.shipParts);

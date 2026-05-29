@@ -11,6 +11,7 @@ import {
   advanceDate,
   getCargoRemaining,
   getPlanet,
+  getResource,
   getTravelDurationDays,
   getTravelCost,
   serializeCombatShip,
@@ -28,10 +29,10 @@ const ENEMY_SPAWN_THRESHOLDS = [
 
 // Salvage ranges per enemy class awarded on victory.
 const SALVAGE_BY_CLASS = {
-  falcon:    { creditsMin: 50,  creditsMax: 150, partsMin: 1, partsMax: 3 },
-  vanguard:  { creditsMin: 150, creditsMax: 350, partsMin: 2, partsMax: 5 },
-  leviathan: { creditsMin: 200, creditsMax: 450, partsMin: 3, partsMax: 6 },
-  bastion:   { creditsMin: 350, creditsMax: 700, partsMin: 5, partsMax: 9 }
+  falcon:    { creditsMin: 350,  creditsMax: 700,  partsMin: 3,  partsMax: 7 },
+  vanguard:  { creditsMin: 700,  creditsMax: 1200, partsMin: 5,  partsMax: 10 },
+  leviathan: { creditsMin: 900,  creditsMax: 1600, partsMin: 7,  partsMax: 13 },
+  bastion:   { creditsMin: 1400, creditsMax: 2400, partsMin: 10, partsMax: 18 }
 };
 
 function rollEnemyClass(rng) {
@@ -291,13 +292,27 @@ export function resolveIntegratedBattleTurn(state, playerAction, rng) {
   };
 
   if (resolvedBattle.phase === "ended") {
-    return applyBattleOutcome(nextState, rng);
+    return {
+      ok: true,
+      message: "Battle ended.",
+      state: nextState
+    };
   }
 
   return {
     ok: true,
     message: "Battle turn resolved.",
     state: nextState
+  };
+}
+
+export function previewVictoryLoot(state) {
+  if (state.combat?.battle?.winner !== "player") return null;
+  const salvageRng = createRng(state.combat.rngSeed);
+  const loot = rollSalvage(state.combat.enemyClassId ?? "vanguard", salvageRng);
+  return {
+    credits: loot.credits,
+    parts: Math.min(loot.parts, getCargoRemaining(state))
   };
 }
 
@@ -308,41 +323,11 @@ export function applyBattleOutcome(state, rng) {
   }
 
   if (battle.winner === "player" || battle.winner === "escaped") {
-    const destinationId = state.pendingTravel.destinationPlanetId;
-    const destination = getPlanet(destinationId);
+    return applyCompletedTravelBattle(state, battle, rng);
+  }
 
-    let salvageCredits = 0;
-    let salvageParts = 0;
-    if (battle.winner === "player") {
-      const salvageRng = rng ?? createRng(state.combat.rngSeed);
-      const loot = rollSalvage(state.combat.enemyClassId ?? "vanguard", salvageRng);
-      salvageCredits = loot.credits;
-      salvageParts = Math.min(loot.parts, getCargoRemaining(state));
-    }
-
-    const partsText = salvageParts > 0 ? `, ${salvageParts} Ship Parts` : "";
-    const outcomeText = battle.winner === "player"
-      ? `Victory near ${destination.name}. Salvage: ${salvageCredits} credits${partsText}.`
-      : `Escaped the encounter and continued to ${destination.name}.`;
-
-    const nextCargo = salvageParts > 0
-      ? { ...state.cargo, shipParts: (state.cargo.shipParts ?? 0) + salvageParts }
-      : state.cargo;
-
-    return {
-      ok: true,
-      message: outcomeText,
-      state: completeTravel(
-        {
-          ...state,
-          credits: state.credits + salvageCredits,
-          cargo: nextCargo,
-          playerCombatShip: serializeCombatShip(battle.player, false)
-        },
-        destinationId,
-        outcomeText
-      )
-    };
+  if (battle.winner === "enemyEscaped") {
+    return applyCompletedTravelBattle(state, battle, rng);
   }
 
   const message = battle.winner === "draw"
@@ -362,6 +347,51 @@ export function applyBattleOutcome(state, rng) {
       message
     )
   };
+}
+
+function applyCompletedTravelBattle(state, battle, rng) {
+    const destinationId = state.pendingTravel.destinationPlanetId;
+    const destination = getPlanet(destinationId);
+    const outcomeRng = rng ?? createRng(state.combat.rngSeed);
+    const cargoLoss = rollCargoLoss(state, battle, outcomeRng);
+    const cargoAfterLoss = cargoLoss.cargo;
+    const cargoLossText = cargoLoss.lost.length > 0
+      ? ` Cargo lost: ${cargoLoss.lost.map((entry) => `${entry.quantity} ${entry.name}`).join(", ")}.`
+      : "";
+
+    let salvageCredits = 0;
+    let salvageParts = 0;
+    if (battle.winner === "player") {
+      const loot = rollSalvage(state.combat.enemyClassId ?? "vanguard", outcomeRng);
+      salvageCredits = loot.credits;
+      salvageParts = Math.min(loot.parts, getCargoRemaining({ ...state, cargo: cargoAfterLoss }));
+    }
+
+    const partsText = salvageParts > 0 ? `, ${salvageParts} Ship Parts` : "";
+    const outcomeText = battle.winner === "player"
+      ? `Victory near ${destination.name}. Salvage: ${salvageCredits} credits${partsText}.${cargoLossText}`
+      : battle.winner === "enemyEscaped"
+        ? `Hostile ship escaped near ${destination.name}; route is clear.${cargoLossText}`
+        : `Escaped the encounter and continued to ${destination.name}.${cargoLossText}`;
+
+    const nextCargo = salvageParts > 0
+      ? { ...cargoAfterLoss, shipParts: (cargoAfterLoss.shipParts ?? 0) + salvageParts }
+      : cargoAfterLoss;
+
+    return {
+      ok: true,
+      message: outcomeText,
+      state: completeTravel(
+        {
+          ...state,
+          credits: state.credits + salvageCredits,
+          cargo: nextCargo,
+          playerCombatShip: serializeCombatShip(battle.player, false)
+        },
+        destinationId,
+        outcomeText
+      )
+    };
 }
 
 export function completeTravel(state, destinationPlanetId, message) {
@@ -392,6 +422,7 @@ function rehydratePlayerShip(battle, persistentShip, gameState) {
     ...baseShip,
     hull: persistentShip?.hull ?? baseShip.hull,
     shield: persistentShip?.shield ?? baseShip.shield,
+    hullDamageTaken: 0,
     weapons: persistentShip?.weapons?.map((weapon) => ({ ...weapon, cooldownRemaining: 0 })) ?? baseShip.weapons
   };
 
@@ -409,6 +440,42 @@ function restoreDockedShields(persistentShip) {
     shield: baseShip.shieldMax,
     weapons: persistentShip?.weapons?.map((weapon) => ({ ...weapon, cooldownRemaining: 0 })) ?? baseShip.weapons
   };
+}
+
+function rollCargoLoss(state, battle, rng) {
+  const hullDamageTaken = battle.player.hullDamageTaken ?? 0;
+  if (hullDamageTaken <= 0 || getCargoRemaining(state) >= state.cargoCapacity) {
+    return { cargo: state.cargo, lost: [] };
+  }
+
+  const entries = Object.entries(state.cargo).filter(([, quantity]) => quantity > 0);
+  if (entries.length === 0) {
+    return { cargo: state.cargo, lost: [] };
+  }
+
+  const damageRatio = battle.player.hullMax > 0 ? hullDamageTaken / battle.player.hullMax : 0;
+  const lossChance = clamp(0.08 + damageRatio * 0.7, 0.08, 0.75);
+  if (rng.next() >= lossChance) {
+    return { cargo: state.cargo, lost: [] };
+  }
+
+  const totalCargo = entries.reduce((sum, [, quantity]) => sum + quantity, 0);
+  let toLose = Math.max(1, Math.min(totalCargo, Math.ceil(totalCargo * clamp(damageRatio, 0.05, 0.65) * (0.5 + rng.next()))));
+  const nextCargo = { ...state.cargo };
+  const lost = [];
+
+  for (const [resourceId] of entries) {
+    if (toLose <= 0) break;
+    const available = nextCargo[resourceId] ?? 0;
+    const quantity = Math.min(available, toLose);
+    if (quantity <= 0) continue;
+    nextCargo[resourceId] -= quantity;
+    if (nextCargo[resourceId] === 0) delete nextCargo[resourceId];
+    lost.push({ resourceId, name: getResource(resourceId).name, quantity });
+    toLose -= quantity;
+  }
+
+  return { cargo: nextCargo, lost };
 }
 
 function clampRepair(battle) {

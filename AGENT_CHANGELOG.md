@@ -1,5 +1,50 @@
 # Agent Changelog
 
+## 2026-05-28 23:21 CDT - Codex - feature/claude/ship-upgrades-and-purchasing
+
+- Status: approved
+- Summary: Human authorized committing the current feature state, merging it to `main`, tagging `ship_upgrades_v1`, and pushing to `origin`.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Approval logging only; previous verification for this feature passed with `npm test`, JS syntax checks, `git diff --check`, and local server smoke checks.
+- UI review: approved-by-human
+- Blockers or coordination notes: Proceeding with scoped commit, merge to `main`, tag `ship_upgrades_v1`, and push per human authorization.
+
+## 2026-05-28 22:42 CDT - Codex - feature/claude/ship-upgrades-and-purchasing
+
+- Status: ready-for-review
+- Summary: Fixed follow-up battle issues: preset editor sliders now cap by available ship power, battle hit chance was rebalanced to make high sensors meaningfully reliable, 20 explicit hit-chance scenarios were added for player/enemy proportionality, and battle hotkeys were added for presets, end allocation, firing, brace, and run.
+- Files changed: `src/app.js`, `src/combat/data.js`, `src/combat/rules.js`, `src/combat/uiState.js`, `test/combat.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` — pass. `node --check src/app.js`, `src/combat/rules.js`, `src/combat/uiState.js`, and `src/combat/data.js` — pass. `git diff --check` — pass. `curl -I http://127.0.0.1:4174` and `curl -I http://127.0.0.1:4174/src/app.js` — `200 OK`.
+- UI review: pending-human-test at `http://127.0.0.1:4174`
+- Blockers or coordination notes: UI changes still require human approval before completion. Work remains on the feature branch; no merge to `main` or tag without explicit human approval.
+
+## 2026-05-28 22:37 CDT - Codex - feature/claude/ship-upgrades-and-purchasing
+
+- Status: in-progress
+- Summary: Addressing follow-up combat UX and balance issues: preset sliders must be capped by ship power, hit chance needs scenario-based rebalance, and battle hotkeys are being added.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Not yet; implementation in progress.
+- UI review: pending-human-test
+- Blockers or coordination notes: Continuing on existing feature branch with previous uncommitted implementation changes preserved.
+
+## 2026-05-28 22:27 CDT - Codex - feature/claude/ship-upgrades-and-purchasing
+
+- Status: ready-for-review
+- Summary: Implemented all `ideas.txt` items: emergency 5x fuel buying, fuel selling, hidden-context-safe news/events with market price modifiers, removed player Hold action, adjustable combat presets, less sensor-dominant hit math, enemy escape and repair behavior, hull-damage malfunctions, cargo loss from hull damage, and larger class-scaled victory rewards.
+- Files changed: `index.html`, `src/app.js`, `src/events.js`, `src/game.js`, `src/uiState.js`, `src/styles.css`, `src/travelCombat.js`, `src/combat/ai.js`, `src/combat/data.js`, `src/combat/rules.js`, `src/combat/styles.css`, `src/combat/uiState.js`, `test/combat.test.js`, `test/game.test.js`, `test/travelCombat.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` — pass. `node --check src/app.js`, `src/game.js`, `src/uiState.js`, `src/travelCombat.js`, `src/events.js`, `src/combat/rules.js`, `src/combat/ai.js`, and `src/combat/uiState.js` — pass. `curl -I http://127.0.0.1:4174` and `curl -I http://127.0.0.1:4174/src/app.js` — `200 OK`.
+- UI review: pending-human-test at `http://127.0.0.1:4174`
+- Blockers or coordination notes: UI changes require human approval before being considered complete. Existing untracked `.claude/`, `.ideas.txt.swp`, and `ideas.txt` remain uncommitted/user-owned. No merge to `main` or release tag without explicit human approval.
+
+## 2026-05-28 22:11 CDT - Codex - feature/claude/ship-upgrades-and-purchasing
+
+- Status: started
+- Summary: Planning execution for all items in `ideas.txt` from Claude's latest ship upgrades branch while preserving existing uncommitted battle outcome UI changes.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Not yet; planning in progress.
+- UI review: not-applicable
+- Blockers or coordination notes: Current branch has pre-existing uncommitted edits in `index.html`, `src/app.js`, and `src/travelCombat.js`, plus untracked `.claude/`, `.ideas.txt.swp`, and `ideas.txt`. Treat those as existing user/Claude work and do not overwrite them.
+
 ## 2026-05-28 CDT - Claude - feature/claude/ship-upgrades-and-purchasing
 
 - Status: ready-for-review

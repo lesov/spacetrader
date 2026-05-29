@@ -5,13 +5,16 @@ import test from "node:test";
 import { FUEL_RESOURCE_ID, campaign, planets, resources } from "../src/data.js";
 import {
   CARGO_UPGRADE,
+  EMERGENCY_FUEL_MULTIPLIER,
   POWER_UPGRADE,
   advanceDate,
+  buyEmergencyFuelForTravel,
   buyResource,
   cancelTravelConfirmation,
   createInitialState,
   getCargoRemaining,
   getCargoUsed,
+  getEmergencyFuelQuote,
   getEffectiveCargoCapacity,
   getEffectivePowerCapacity,
   getMarketPrice,
@@ -33,6 +36,7 @@ import {
   getDestinationRows,
   getMapLegendRows,
   getMarketRows,
+  getNewsRows,
   getPlanetMapView,
   getProjectedMapView,
   getStatusView
@@ -121,6 +125,45 @@ test("fuel purchases fail when credits are insufficient", () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.state.fuel, state.fuel);
+});
+
+test("fuel can be sold even when credits are zero", () => {
+  const state = { ...createInitialState(), credits: 0, fuel: 5 };
+  const price = getMarketPrice(state.currentPlanetId, FUEL_RESOURCE_ID, state.currentDate);
+
+  const result = sellResource(state, FUEL_RESOURCE_ID, 3);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.fuel, 2);
+  assert.equal(result.state.credits, price * 3);
+  assert.equal(result.state.tradedAtCurrentLocation, true);
+});
+
+test("emergency fuel buys the route deficit at five times local fuel cost", () => {
+  const state = { ...createInitialState(), fuel: 0, credits: 2000 };
+  const destinationId = "europa";
+  const quote = getEmergencyFuelQuote(state, destinationId);
+  const localFuelPrice = getMarketPrice(state.currentPlanetId, FUEL_RESOURCE_ID, state.currentDate);
+
+  assert.equal(quote.unitPrice, localFuelPrice * EMERGENCY_FUEL_MULTIPLIER);
+  assert.equal(quote.neededFuel, getTravelCost(state.currentPlanetId, destinationId));
+
+  const result = buyEmergencyFuelForTravel(state, destinationId);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.fuel, quote.neededFuel);
+  assert.equal(result.state.credits, state.credits - quote.total);
+  assert.equal(result.state.tradedAtCurrentLocation, true);
+});
+
+test("emergency fuel fails when credits are insufficient", () => {
+  const state = { ...createInitialState(), fuel: 0, credits: 1 };
+
+  const result = buyEmergencyFuelForTravel(state, "europa");
+
+  assert.equal(result.ok, false);
+  assert.equal(result.state.fuel, 0);
+  assert.equal(result.state.credits, 1);
 });
 
 test("travel consumes fuel and changes current location after local trade", () => {
@@ -306,6 +349,29 @@ test("player-facing setting data does not expose the hidden real-world mapping",
   }
 });
 
+test("news tracker exposes active in-world market events without hidden mapping terms", () => {
+  const rows = getNewsRows(createInitialState());
+  assert.ok(rows.length > 0);
+
+  const visibleText = rows.map((row) => `${row.headline}\n${row.body}\n${row.dateRange}`).join("\n");
+  assert.match(visibleText, /Route|Yards/i);
+
+  for (const pattern of [/United States/i, /Soviet/i, /China/i, /Vietnam/i, /1975/, /2025/]) {
+    assert.doesNotMatch(visibleText, pattern);
+  }
+});
+
+test("market events modify prices for affected goods", () => {
+  const state = createInitialState();
+  const lunaParts = getMarketRows(state).find((row) => row.id === "shipParts");
+  const baseRange = planets.find((planet) => planet.id === "luna").priceRanges.shipParts;
+  const basePrice = Math.round((baseRange.min + baseRange.max) / 2);
+
+  assert.ok(lunaParts.price > basePrice);
+  assert.equal(lunaParts.modifierPercent, 14);
+  assert.match(lunaParts.priceLabel, /\+14%/);
+});
+
 test("ui state derives cargo capacity and formatted quantities", () => {
   const state = {
     ...createInitialState(),
@@ -356,6 +422,10 @@ test("ui state exposes useful slider maximums for multi-unit buy and sell action
   assert.equal(metalsRow.sellMax, 4);
   assert.equal(metalsRow.sellSlider.max, 4);
   assert.equal(metalsRow.sellSlider.disabled, false);
+
+  const fuelRow = getMarketRows(state).find((row) => row.id === FUEL_RESOURCE_ID);
+  assert.equal(fuelRow.sellMax, state.fuel);
+  assert.equal(fuelRow.sellSlider.disabled, false);
 });
 
 test("destination rows expose confirmation state for untraded locations", () => {

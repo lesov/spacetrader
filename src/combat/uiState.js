@@ -29,13 +29,14 @@ export function systemTooltip(sys, ship) {
   const n = ship.allocation[sys];
   switch (sys) {
     case 'weapons': {
+      const effective = (ship.basePower?.weapons ?? 0) + n;
       const lines = ship.weapons
-        .map(w => `${w.name}: ${w.baseDamage * Math.max(n, 1)} dmg/hit`)
+        .map(w => `${w.name}: ${w.baseDamage * Math.max(effective, 1)} dmg/hit`)
         .join(', ');
-      return `Multiplies weapon damage by points here.\nAt ${n} pts: ${n === 0 ? '0 damage (weapons offline)' : lines}.`;
+      return `Multiplies weapon damage by effective weapon points.\nAt ${effective} effective pts: ${effective === 0 ? '0 damage (weapons offline)' : lines}.`;
     }
     case 'shields':
-      return `Restores ${ship.shieldRegen} shield per point each turn (cap ${ship.shieldMax}).\nAt ${n} pts: +${ship.shieldRegen * n} shields/turn. Brace doubles this.`;
+      return `Restores ${ship.shieldRegen} shield per effective point each turn (cap ${ship.shieldMax}).\nAt ${n + (ship.basePower?.shields ?? 0)} effective pts: +${ship.shieldRegen * (n + (ship.basePower?.shields ?? 0))} shields/turn. Brace doubles this.`;
     case 'engines':
       return `Adds ${(ENGINES_EVASION_PER_POINT * 100).toFixed(0)}% evasion per point vs incoming fire.\nAt ${n} pts: +${(n * ENGINES_EVASION_PER_POINT * 100).toFixed(0)}% dodge. Also boosts Run Away chance (×12% per pt).`;
     case 'sensors':
@@ -56,6 +57,68 @@ export const PRESETS = [
   { label: 'Defend',   weights: { weapons: 1, shields: 5, engines: 2, sensors: 0, repair: 2 } },
   { label: 'Evasive',  weights: { weapons: 1, shields: 1, engines: 5, sensors: 3, repair: 0 } }
 ];
+
+export function cloneCombatPresets(presets = PRESETS) {
+  return presets.map((preset) => ({
+    label: preset.label,
+    weights: { ...preset.weights }
+  }));
+}
+
+export function setCombatPresetWeight(presets, label, system, value) {
+  if (!SYSTEMS.includes(system)) return cloneCombatPresets(presets);
+  const nextValue = Math.max(0, Math.min(10, Number.parseInt(value, 10) || 0));
+  return cloneCombatPresets(presets).map((preset) => (
+    preset.label === label
+      ? { ...preset, weights: { ...preset.weights, [system]: nextValue } }
+      : preset
+  ));
+}
+
+export function getPresetEditorAllocation(preset, powerCapacity) {
+  const weights = SYSTEMS.reduce((allocation, system) => ({
+    ...allocation,
+    [system]: Math.max(0, Number.parseInt(preset.weights?.[system], 10) || 0)
+  }), {});
+
+  if (totalAllocation(weights) > powerCapacity) {
+    return computePresetAllocation(weights, powerCapacity);
+  }
+
+  return weights;
+}
+
+export function getPresetSliderState(preset, powerCapacity, system) {
+  const allocation = getPresetEditorAllocation(preset, powerCapacity);
+  const total = totalAllocation(allocation);
+  const remaining = Math.max(0, powerCapacity - total);
+  return {
+    value: allocation[system],
+    max: allocation[system] + remaining,
+    remaining,
+    total,
+    isComplete: total === powerCapacity
+  };
+}
+
+export function setCombatPresetAllocation(presets, label, system, value, powerCapacity) {
+  if (!SYSTEMS.includes(system)) return cloneCombatPresets(presets);
+  return cloneCombatPresets(presets).map((preset) => {
+    if (preset.label !== label) return preset;
+
+    const allocation = getPresetEditorAllocation(preset, powerCapacity);
+    const otherTotal = totalAllocation(allocation) - allocation[system];
+    const maxForSystem = Math.max(0, powerCapacity - otherTotal);
+    const nextValue = Math.max(0, Math.min(maxForSystem, Number.parseInt(value, 10) || 0));
+    return {
+      ...preset,
+      weights: {
+        ...allocation,
+        [system]: nextValue
+      }
+    };
+  });
+}
 
 // Distribute powerCapacity across systems proportional to weights.
 // Uses largest-remainder rounding so the total is always exact.
@@ -126,5 +189,6 @@ export function battleResultLabel(winner) {
   if (winner === 'enemy')   return 'Defeat';
   if (winner === 'draw')    return 'Draw';
   if (winner === 'escaped') return 'Escaped';
+  if (winner === 'enemyEscaped') return 'Enemy Escaped';
   return '';
 }

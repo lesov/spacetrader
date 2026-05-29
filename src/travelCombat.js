@@ -1,4 +1,4 @@
-import { ENEMY_CLASS_ID, PLAYER_CLASS_ID } from "./combat/data.js";
+import { SHIP_CLASSES, PLAYER_CLASS_ID } from "./combat/data.js";
 import { aggressorAI } from "./combat/ai.js";
 import {
   buildShipState,
@@ -6,7 +6,54 @@ import {
   resolveFullTurn,
   validateAllocation
 } from "./combat/rules.js";
-import { advanceDate, getPlanet, getTravelDurationDays, getTravelCost, serializeCombatShip } from "./game.js";
+import { createRng } from "./combat/rng.js";
+import {
+  advanceDate,
+  getCargoRemaining,
+  getPlanet,
+  getResource,
+  getTravelDurationDays,
+  getTravelCost,
+  serializeCombatShip,
+  getEffectivePowerCapacity
+} from "./game.js";
+
+// Enemy spawn weights. More powerful classes appear less frequently.
+// Cumulative thresholds: falcon 45%, vanguard 30%, leviathan 15%, bastion 10%.
+const ENEMY_SPAWN_THRESHOLDS = [
+  { classId: "falcon",    threshold: 0.45 },
+  { classId: "vanguard",  threshold: 0.75 },
+  { classId: "leviathan", threshold: 0.90 },
+  { classId: "bastion",   threshold: 1.00 }
+];
+
+// Salvage ranges per enemy class awarded on victory.
+const SALVAGE_BY_CLASS = {
+  falcon:    { creditsMin: 350,  creditsMax: 700,  partsMin: 3,  partsMax: 7 },
+  vanguard:  { creditsMin: 700,  creditsMax: 1200, partsMin: 5,  partsMax: 10 },
+  leviathan: { creditsMin: 900,  creditsMax: 1600, partsMin: 7,  partsMax: 13 },
+  bastion:   { creditsMin: 1400, creditsMax: 2400, partsMin: 10, partsMax: 18 }
+};
+
+function rollEnemyClass(rng) {
+  const roll = rng.next();
+  for (const entry of ENEMY_SPAWN_THRESHOLDS) {
+    if (roll < entry.threshold) return entry.classId;
+  }
+  return "bastion";
+}
+
+function rollSalvage(enemyClassId, rng) {
+  const table = SALVAGE_BY_CLASS[enemyClassId] ?? SALVAGE_BY_CLASS.vanguard;
+  return {
+    credits: randInt(table.creditsMin, table.creditsMax, rng.next()),
+    parts:   randInt(table.partsMin,   table.partsMax,   rng.next())
+  };
+}
+
+function randInt(min, max, roll) {
+  return min + Math.floor(roll * (max - min + 1));
+}
 
 export const ENCOUNTER_CHANCE_BY_RISK = {
   low: 0.12,
@@ -102,10 +149,12 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
 
 export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
   const destination = getPlanet(destinationPlanetId);
-  const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, ENEMY_CLASS_ID), state.playerCombatShip);
+  const enemyClassId = rollEnemyClass(rng);
+  const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, enemyClassId), state.playerCombatShip, state);
   const seed = Math.floor(rng.next() * 0xffffffff);
   const risk = Math.round(encounter.chance * 100);
-  const message = `Hostile contact en route to ${destination.name}. Battle risk was ${risk}%.`;
+  const enemyLabel = SHIP_CLASSES[enemyClassId]?.label ?? enemyClassId;
+  const message = `Hostile contact en route to ${destination.name}: ${enemyLabel}. Battle risk was ${risk}%.`;
 
   return {
     ok: true,
@@ -123,7 +172,7 @@ export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
         combat: {
           battle,
           rngSeed: seed,
-          enemyClassId: ENEMY_CLASS_ID
+          enemyClassId
         }
       },
       message
@@ -243,7 +292,11 @@ export function resolveIntegratedBattleTurn(state, playerAction, rng) {
   };
 
   if (resolvedBattle.phase === "ended") {
-    return applyBattleOutcome(nextState);
+    return {
+      ok: true,
+      message: "Battle ended.",
+      state: nextState
+    };
   }
 
   return {
@@ -253,33 +306,28 @@ export function resolveIntegratedBattleTurn(state, playerAction, rng) {
   };
 }
 
-export function applyBattleOutcome(state) {
+export function previewVictoryLoot(state) {
+  if (state.combat?.battle?.winner !== "player") return null;
+  const salvageRng = createRng(state.combat.rngSeed);
+  const loot = rollSalvage(state.combat.enemyClassId ?? "vanguard", salvageRng);
+  return {
+    credits: loot.credits,
+    parts: Math.min(loot.parts, getCargoRemaining(state))
+  };
+}
+
+export function applyBattleOutcome(state, rng) {
   const battle = state.combat?.battle;
   if (!battle || battle.phase !== "ended") {
     return fail(state, "Battle is not complete.");
   }
 
   if (battle.winner === "player" || battle.winner === "escaped") {
-    const destinationId = state.pendingTravel.destinationPlanetId;
-    const destination = getPlanet(destinationId);
-    const salvage = battle.winner === "player" ? 100 + state.pendingTravel.fuelCost * 10 : 0;
-    const outcomeText = battle.winner === "player"
-      ? `Victory near ${destination.name}. Salvage recovered: ${salvage} credits.`
-      : `Escaped the encounter and continued to ${destination.name}.`;
+    return applyCompletedTravelBattle(state, battle, rng);
+  }
 
-    return {
-      ok: true,
-      message: outcomeText,
-      state: completeTravel(
-        {
-          ...state,
-          credits: state.credits + salvage,
-          playerCombatShip: serializeCombatShip(battle.player, false)
-        },
-        destinationId,
-        outcomeText
-      )
-    };
+  if (battle.winner === "enemyEscaped") {
+    return applyCompletedTravelBattle(state, battle, rng);
   }
 
   const message = battle.winner === "draw"
@@ -301,6 +349,51 @@ export function applyBattleOutcome(state) {
   };
 }
 
+function applyCompletedTravelBattle(state, battle, rng) {
+    const destinationId = state.pendingTravel.destinationPlanetId;
+    const destination = getPlanet(destinationId);
+    const outcomeRng = rng ?? createRng(state.combat.rngSeed);
+    const cargoLoss = rollCargoLoss(state, battle, outcomeRng);
+    const cargoAfterLoss = cargoLoss.cargo;
+    const cargoLossText = cargoLoss.lost.length > 0
+      ? ` Cargo lost: ${cargoLoss.lost.map((entry) => `${entry.quantity} ${entry.name}`).join(", ")}.`
+      : "";
+
+    let salvageCredits = 0;
+    let salvageParts = 0;
+    if (battle.winner === "player") {
+      const loot = rollSalvage(state.combat.enemyClassId ?? "vanguard", outcomeRng);
+      salvageCredits = loot.credits;
+      salvageParts = Math.min(loot.parts, getCargoRemaining({ ...state, cargo: cargoAfterLoss }));
+    }
+
+    const partsText = salvageParts > 0 ? `, ${salvageParts} Ship Parts` : "";
+    const outcomeText = battle.winner === "player"
+      ? `Victory near ${destination.name}. Salvage: ${salvageCredits} credits${partsText}.${cargoLossText}`
+      : battle.winner === "enemyEscaped"
+        ? `Hostile ship escaped near ${destination.name}; route is clear.${cargoLossText}`
+        : `Escaped the encounter and continued to ${destination.name}.${cargoLossText}`;
+
+    const nextCargo = salvageParts > 0
+      ? { ...cargoAfterLoss, shipParts: (cargoAfterLoss.shipParts ?? 0) + salvageParts }
+      : cargoAfterLoss;
+
+    return {
+      ok: true,
+      message: outcomeText,
+      state: completeTravel(
+        {
+          ...state,
+          credits: state.credits + salvageCredits,
+          cargo: nextCargo,
+          playerCombatShip: serializeCombatShip(battle.player, false)
+        },
+        destinationId,
+        outcomeText
+      )
+    };
+}
+
 export function completeTravel(state, destinationPlanetId, message) {
   const destination = getPlanet(destinationPlanetId);
   const persistentShip = restoreDockedShields(state.playerCombatShip);
@@ -320,12 +413,16 @@ export function completeTravel(state, destinationPlanetId, message) {
   );
 }
 
-function rehydratePlayerShip(battle, persistentShip) {
-  const baseShip = buildShipState(persistentShip?.classId ?? PLAYER_CLASS_ID);
+// Rehydrate the player ship for a combat encounter, applying effective power capacity from upgrades.
+function rehydratePlayerShip(battle, persistentShip, gameState) {
+  const classId = persistentShip?.classId ?? PLAYER_CLASS_ID;
+  const effectivePower = gameState ? getEffectivePowerCapacity(gameState) : undefined;
+  const baseShip = buildShipState(classId, effectivePower !== undefined ? { powerCapacity: effectivePower } : {});
   const player = {
     ...baseShip,
     hull: persistentShip?.hull ?? baseShip.hull,
     shield: persistentShip?.shield ?? baseShip.shield,
+    hullDamageTaken: 0,
     weapons: persistentShip?.weapons?.map((weapon) => ({ ...weapon, cooldownRemaining: 0 })) ?? baseShip.weapons
   };
 
@@ -343,6 +440,42 @@ function restoreDockedShields(persistentShip) {
     shield: baseShip.shieldMax,
     weapons: persistentShip?.weapons?.map((weapon) => ({ ...weapon, cooldownRemaining: 0 })) ?? baseShip.weapons
   };
+}
+
+function rollCargoLoss(state, battle, rng) {
+  const hullDamageTaken = battle.player.hullDamageTaken ?? 0;
+  if (hullDamageTaken <= 0 || getCargoRemaining(state) >= state.cargoCapacity) {
+    return { cargo: state.cargo, lost: [] };
+  }
+
+  const entries = Object.entries(state.cargo).filter(([, quantity]) => quantity > 0);
+  if (entries.length === 0) {
+    return { cargo: state.cargo, lost: [] };
+  }
+
+  const damageRatio = battle.player.hullMax > 0 ? hullDamageTaken / battle.player.hullMax : 0;
+  const lossChance = clamp(0.08 + damageRatio * 0.7, 0.08, 0.75);
+  if (rng.next() >= lossChance) {
+    return { cargo: state.cargo, lost: [] };
+  }
+
+  const totalCargo = entries.reduce((sum, [, quantity]) => sum + quantity, 0);
+  let toLose = Math.max(1, Math.min(totalCargo, Math.ceil(totalCargo * clamp(damageRatio, 0.05, 0.65) * (0.5 + rng.next()))));
+  const nextCargo = { ...state.cargo };
+  const lost = [];
+
+  for (const [resourceId] of entries) {
+    if (toLose <= 0) break;
+    const available = nextCargo[resourceId] ?? 0;
+    const quantity = Math.min(available, toLose);
+    if (quantity <= 0) continue;
+    nextCargo[resourceId] -= quantity;
+    if (nextCargo[resourceId] === 0) delete nextCargo[resourceId];
+    lost.push({ resourceId, name: getResource(resourceId).name, quantity });
+    toLose -= quantity;
+  }
+
+  return { cargo: nextCargo, lost };
 }
 
 function clampRepair(battle) {

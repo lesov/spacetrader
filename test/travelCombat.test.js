@@ -117,7 +117,10 @@ test("high risk travel can still avoid combat when random roll is over chance", 
 });
 
 test("victory completes travel, awards salvage, and restores docked shields", () => {
+  // sequenceRng([0, 0.5]): encounter roll=0 (triggers), enemy class roll=0.5 → vanguard
   const state = beginTravel(tradedState(), "europa", {}, sequenceRng([0, 0.5])).state;
+  assert.equal(state.combat.enemyClassId, "vanguard");
+
   const battle = {
     ...state.combat.battle,
     phase: "ended",
@@ -132,18 +135,18 @@ test("victory completes travel, awards salvage, and restores docked shields", ()
     }
   };
 
-  const result = applyBattleOutcome({
-    ...state,
-    combat: {
-      ...state.combat,
-      battle
-    }
-  });
+  // Deterministic salvage rng: roll 0.5 each → vanguard credits=950, parts=8
+  // vanguard: creditsMin=700 creditsMax=1200 partsMin=5 partsMax=10
+  const result = applyBattleOutcome(
+    { ...state, combat: { ...state.combat, battle } },
+    sequenceRng([0.5, 0.5])
+  );
 
   assert.equal(result.ok, true);
   assert.equal(result.state.mode, "trade");
   assert.equal(result.state.currentPlanetId, "europa");
-  assert.equal(result.state.credits, 1000 + 100 + state.pendingTravel.fuelCost * 10);
+  assert.equal(result.state.credits, 1000 + 950);
+  assert.equal(result.state.cargo.shipParts, 8);
   assert.equal(result.state.currentDate, advanceDate(state.currentDate, state.pendingTravel.travelDurationDays));
   assert.equal(result.state.playerCombatShip.hull, 52);
   assert.equal(result.state.playerCombatShip.shield, battle.player.shieldMax);
@@ -246,6 +249,69 @@ test("cargo and credits are unchanged by combat escape", () => {
   assert.equal(result.state.credits, 777);
 });
 
+test("enemy escape completes travel without salvage", () => {
+  const state = beginTravel(tradedState(), "europa", {}, sequenceRng([0, 0.5])).state;
+  const battle = {
+    ...state.combat.battle,
+    phase: "ended",
+    winner: "enemyEscaped",
+    player: {
+      ...state.combat.battle.player,
+      hull: 78
+    }
+  };
+
+  const result = applyBattleOutcome({
+    ...state,
+    combat: {
+      ...state.combat,
+      battle
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.mode, "trade");
+  assert.equal(result.state.currentPlanetId, "europa");
+  assert.equal(result.state.credits, 1000);
+  assert.equal(result.state.cargo.shipParts, undefined);
+});
+
+test("cargo can be lost after battle only when hull damage was sustained", () => {
+  const state = beginTravel({
+    ...tradedState(),
+    cargo: { metals: 6, water: 4 }
+  }, "europa", {}, sequenceRng([0, 0.5])).state;
+
+  const damagedBattle = {
+    ...state.combat.battle,
+    phase: "ended",
+    winner: "escaped",
+    player: {
+      ...state.combat.battle.player,
+      hullDamageTaken: 60
+    }
+  };
+
+  const damagedResult = applyBattleOutcome(
+    { ...state, combat: { ...state.combat, battle: damagedBattle } },
+    sequenceRng([0.01, 0.5])
+  );
+
+  assert.ok((damagedResult.state.cargo.metals ?? 0) + (damagedResult.state.cargo.water ?? 0) < 10);
+  assert.match(damagedResult.message, /Cargo lost/);
+
+  const cleanBattle = {
+    ...damagedBattle,
+    player: { ...damagedBattle.player, hullDamageTaken: 0 }
+  };
+  const cleanResult = applyBattleOutcome(
+    { ...state, combat: { ...state.combat, battle: cleanBattle } },
+    sequenceRng([0.01, 0.5])
+  );
+
+  assert.deepEqual(cleanResult.state.cargo, { metals: 6, water: 4 });
+});
+
 test("destination rows expose encounter risk labels", () => {
   const rows = getDestinationRows(createInitialState());
 
@@ -253,4 +319,72 @@ test("destination rows expose encounter risk labels", () => {
   assert.equal(rows.every((row) => row.encounterChance >= 0.08 && row.encounterChance <= 0.9), true);
   assert.equal(rows.some((row) => row.riskLevel === "high" && row.encounterChance > 0.55 && row.encounterChance < 1), true);
   assert.equal(rows.every((row) => /\d+% battle risk/.test(row.encounterRiskLabel)), true);
+});
+
+test("enemy class is selected by weighted roll: low roll gives falcon, high roll gives bastion", () => {
+  // roll=0.2 → falcon (< 0.45)
+  const falconResult = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.2, 0.5]));
+  assert.equal(falconResult.state.combat.enemyClassId, "falcon");
+
+  // roll=0.6 → vanguard (0.45 ≤ x < 0.75)
+  const vanguardResult = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.6, 0.5]));
+  assert.equal(vanguardResult.state.combat.enemyClassId, "vanguard");
+
+  // roll=0.85 → leviathan (0.75 ≤ x < 0.90)
+  const leviathanResult = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.85, 0.5]));
+  assert.equal(leviathanResult.state.combat.enemyClassId, "leviathan");
+
+  // roll=0.95 → bastion (≥ 0.90)
+  const bastionResult = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.95, 0.5]));
+  assert.equal(bastionResult.state.combat.enemyClassId, "bastion");
+});
+
+test("encounter message names the enemy ship class", () => {
+  const result = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.95, 0.5]));
+  assert.match(result.message, /Bastion-class Gunboat/);
+});
+
+test("victory awards more credits and parts for bastion than for falcon", () => {
+  const endedBattle = (baseState) => ({
+    ...baseState.combat.battle,
+    phase: "ended",
+    winner: "player"
+  });
+
+  const falconState = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.2, 0.5])).state;
+  const falconResult = applyBattleOutcome(
+    { ...falconState, combat: { ...falconState.combat, battle: endedBattle(falconState) } },
+    sequenceRng([0.5, 0.5])
+  );
+  assert.equal(falconResult.state.credits, 1000 + 525);
+  assert.equal(falconResult.state.cargo.shipParts, 5);
+
+  const bastionState = beginTravel(tradedState(), "mercury", {}, sequenceRng([0, 0.95, 0.5])).state;
+  const bastionResult = applyBattleOutcome(
+    { ...bastionState, combat: { ...bastionState.combat, battle: endedBattle(bastionState) } },
+    sequenceRng([0.5, 0.5])
+  );
+  assert.equal(bastionResult.state.credits, 1000 + 1900);
+  assert.equal(bastionResult.state.cargo.shipParts, 14);
+
+  assert.ok(bastionResult.state.credits > falconResult.state.credits);
+  assert.ok(bastionResult.state.cargo.shipParts > falconResult.state.cargo.shipParts);
+});
+
+test("salvage ship parts are capped at available cargo space", () => {
+  // Fill cargo almost to the brim: capacity 20, use 19
+  const fullState = {
+    ...tradedState(),
+    cargo: { metals: 19 }
+  };
+  const combatState = beginTravel(fullState, "mercury", {}, sequenceRng([0, 0.95, 0.5])).state;
+  const battle = { ...combatState.combat.battle, phase: "ended", winner: "player" };
+
+  // bastion gives 5-9 parts, but only 1 cargo slot is free
+  const result = applyBattleOutcome(
+    { ...combatState, combat: { ...combatState.combat, battle } },
+    sequenceRng([0.5, 0.5])
+  );
+
+  assert.equal(result.state.cargo.shipParts, 1);
 });

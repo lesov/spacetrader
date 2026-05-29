@@ -4,12 +4,19 @@ import test from "node:test";
 
 import { FUEL_RESOURCE_ID, campaign, planets, resources } from "../src/data.js";
 import {
+  CARGO_UPGRADE,
+  EMERGENCY_FUEL_MULTIPLIER,
+  POWER_UPGRADE,
   advanceDate,
+  buyEmergencyFuelForTravel,
   buyResource,
   cancelTravelConfirmation,
   createInitialState,
   getCargoRemaining,
   getCargoUsed,
+  getEmergencyFuelQuote,
+  getEffectiveCargoCapacity,
+  getEffectivePowerCapacity,
   getMarketPrice,
   getTravelDurationDays,
   getTravelCost,
@@ -17,6 +24,9 @@ import {
   travelToPlanet,
   validateMarketData
 } from "../src/game.js";
+import { SHIP_CLASSES } from "../src/combat/data.js";
+import { getShipyardView } from "../src/uiState.js";
+import { upgradeShip } from "../src/shipyard.js";
 import {
   formatCargo,
   formatCredits,
@@ -26,6 +36,7 @@ import {
   getDestinationRows,
   getMapLegendRows,
   getMarketRows,
+  getNewsRows,
   getPlanetMapView,
   getProjectedMapView,
   getStatusView
@@ -114,6 +125,45 @@ test("fuel purchases fail when credits are insufficient", () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.state.fuel, state.fuel);
+});
+
+test("fuel can be sold even when credits are zero", () => {
+  const state = { ...createInitialState(), credits: 0, fuel: 5 };
+  const price = getMarketPrice(state.currentPlanetId, FUEL_RESOURCE_ID, state.currentDate);
+
+  const result = sellResource(state, FUEL_RESOURCE_ID, 3);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.fuel, 2);
+  assert.equal(result.state.credits, price * 3);
+  assert.equal(result.state.tradedAtCurrentLocation, true);
+});
+
+test("emergency fuel buys the route deficit at five times local fuel cost", () => {
+  const state = { ...createInitialState(), fuel: 0, credits: 2000 };
+  const destinationId = "europa";
+  const quote = getEmergencyFuelQuote(state, destinationId);
+  const localFuelPrice = getMarketPrice(state.currentPlanetId, FUEL_RESOURCE_ID, state.currentDate);
+
+  assert.equal(quote.unitPrice, localFuelPrice * EMERGENCY_FUEL_MULTIPLIER);
+  assert.equal(quote.neededFuel, getTravelCost(state.currentPlanetId, destinationId));
+
+  const result = buyEmergencyFuelForTravel(state, destinationId);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.fuel, quote.neededFuel);
+  assert.equal(result.state.credits, state.credits - quote.total);
+  assert.equal(result.state.tradedAtCurrentLocation, true);
+});
+
+test("emergency fuel fails when credits are insufficient", () => {
+  const state = { ...createInitialState(), fuel: 0, credits: 1 };
+
+  const result = buyEmergencyFuelForTravel(state, "europa");
+
+  assert.equal(result.ok, false);
+  assert.equal(result.state.fuel, 0);
+  assert.equal(result.state.credits, 1);
 });
 
 test("travel consumes fuel and changes current location after local trade", () => {
@@ -299,6 +349,29 @@ test("player-facing setting data does not expose the hidden real-world mapping",
   }
 });
 
+test("news tracker exposes active in-world market events without hidden mapping terms", () => {
+  const rows = getNewsRows(createInitialState());
+  assert.ok(rows.length > 0);
+
+  const visibleText = rows.map((row) => `${row.headline}\n${row.body}\n${row.dateRange}`).join("\n");
+  assert.match(visibleText, /Route|Yards/i);
+
+  for (const pattern of [/United States/i, /Soviet/i, /China/i, /Vietnam/i, /1975/, /2025/]) {
+    assert.doesNotMatch(visibleText, pattern);
+  }
+});
+
+test("market events modify prices for affected goods", () => {
+  const state = createInitialState();
+  const lunaParts = getMarketRows(state).find((row) => row.id === "shipParts");
+  const baseRange = planets.find((planet) => planet.id === "luna").priceRanges.shipParts;
+  const basePrice = Math.round((baseRange.min + baseRange.max) / 2);
+
+  assert.ok(lunaParts.price > basePrice);
+  assert.equal(lunaParts.modifierPercent, 14);
+  assert.match(lunaParts.priceLabel, /\+14%/);
+});
+
 test("ui state derives cargo capacity and formatted quantities", () => {
   const state = {
     ...createInitialState(),
@@ -349,6 +422,10 @@ test("ui state exposes useful slider maximums for multi-unit buy and sell action
   assert.equal(metalsRow.sellMax, 4);
   assert.equal(metalsRow.sellSlider.max, 4);
   assert.equal(metalsRow.sellSlider.disabled, false);
+
+  const fuelRow = getMarketRows(state).find((row) => row.id === FUEL_RESOURCE_ID);
+  assert.equal(fuelRow.sellMax, state.fuel);
+  assert.equal(fuelRow.sellSlider.disabled, false);
 });
 
 test("destination rows expose confirmation state for untraded locations", () => {
@@ -406,4 +483,138 @@ test("messages are generated for successful and failed actions", () => {
   assert.equal(failure.ok, false);
   assert.match(failure.message, /Only 0 Refined Metals/);
   assert.equal(failure.state.messages[0], failure.message);
+});
+
+// ── Industrial world flags ────────────────────────────────────────────────────
+
+test("exactly Luna, Ganymede, Titan, Mars are industrial", () => {
+  const industrial = planets.filter((p) => p.industrial === true).map((p) => p.id).sort();
+  assert.deepEqual(industrial, ["ganymede", "luna", "mars", "titan"]);
+
+  const nonIndustrial = planets.filter((p) => p.industrial === false);
+  assert.equal(nonIndustrial.length, planets.length - 4, "all other planets should have industrial: false");
+});
+
+test("every planet has an explicit industrial boolean", () => {
+  for (const planet of planets) {
+    assert.equal(typeof planet.industrial, "boolean", `${planet.name} must have explicit boolean industrial`);
+  }
+});
+
+test("validateMarketData catches missing industrial flag", () => {
+  // We test via the live validateMarketData which now checks industrial flags.
+  // The actual data is correct, so errors should be empty.
+  const errors = validateMarketData();
+  assert.deepEqual(errors, []);
+});
+
+// ── Effective capacity getters ────────────────────────────────────────────────
+
+test("getEffectiveCargoCapacity returns base class cargo at upgrade level 0", () => {
+  const state = createInitialState();
+  assert.equal(state.shipUpgrades.cargo, 0);
+  assert.equal(getEffectiveCargoCapacity(state), SHIP_CLASSES.vanguard.cargoCapacity);
+  assert.equal(getEffectiveCargoCapacity(state), 20);
+});
+
+test("getEffectiveCargoCapacity scales correctly with upgrade levels", () => {
+  const base = createInitialState();
+  for (let level = 0; level <= 4; level++) {
+    const state = { ...base, shipUpgrades: { cargo: level, power: 0 } };
+    const expected = SHIP_CLASSES.vanguard.cargoCapacity + level * CARGO_UPGRADE.step;
+    assert.equal(getEffectiveCargoCapacity(state), expected, `level ${level}`);
+  }
+});
+
+test("getEffectivePowerCapacity returns base class power at upgrade level 0", () => {
+  const state = createInitialState();
+  assert.equal(state.shipUpgrades.power, 0);
+  assert.equal(getEffectivePowerCapacity(state), SHIP_CLASSES.vanguard.powerCapacity);
+  assert.equal(getEffectivePowerCapacity(state), 10);
+});
+
+test("getEffectivePowerCapacity scales correctly with upgrade levels", () => {
+  const base = createInitialState();
+  for (let level = 0; level <= 4; level++) {
+    const state = { ...base, shipUpgrades: { cargo: 0, power: level } };
+    const expected = SHIP_CLASSES.vanguard.powerCapacity + level * POWER_UPGRADE.step;
+    assert.equal(getEffectivePowerCapacity(state), expected, `level ${level}`);
+  }
+});
+
+// ── createInitialState shape ──────────────────────────────────────────────────
+
+test("createInitialState starts with shipUpgrades = { cargo: 0, power: 0 }", () => {
+  const state = createInitialState();
+  assert.deepEqual(state.shipUpgrades, { cargo: 0, power: 0 });
+});
+
+test("createInitialState starts with cargoCapacity derived from vanguard class", () => {
+  const state = createInitialState();
+  assert.equal(state.cargoCapacity, SHIP_CLASSES.vanguard.cargoCapacity);
+  assert.equal(state.cargoCapacity, 20);
+});
+
+test("createInitialState playerCombatShip classId is vanguard", () => {
+  const state = createInitialState();
+  assert.equal(state.playerCombatShip.classId, "vanguard");
+});
+
+// ── getShipyardView ───────────────────────────────────────────────────────────
+
+test("getShipyardView returns isIndustrial true at Luna", () => {
+  const state = createInitialState();
+  const view = getShipyardView(state);
+  assert.equal(view.isIndustrial, true);
+});
+
+test("getShipyardView returns isIndustrial false at Venus", () => {
+  const state = { ...createInitialState(), currentPlanetId: "venus" };
+  const view = getShipyardView(state);
+  assert.equal(view.isIndustrial, false);
+});
+
+test("getShipyardView catalog includes all purchasable classes with isCurrent flag", () => {
+  const state = createInitialState();
+  const view = getShipyardView(state);
+  assert.ok(view.catalog.length >= 4);
+  const vanguardRow = view.catalog.find((row) => row.classId === "vanguard");
+  assert.ok(vanguardRow, "vanguard missing from catalog");
+  assert.equal(vanguardRow.isCurrent, true, "vanguard should be current");
+  const otherRows = view.catalog.filter((row) => row.classId !== "vanguard");
+  assert.ok(otherRows.every((row) => row.isCurrent === false), "others should not be current");
+});
+
+test("getShipyardView upgrade canUpgrade is false when not industrial", () => {
+  const state = { ...createInitialState(), currentPlanetId: "earth", credits: 100000 };
+  const view = getShipyardView(state);
+  assert.equal(view.isIndustrial, false);
+  assert.equal(view.cargoUpgrade.canUpgrade, false);
+  assert.equal(view.powerUpgrade.canUpgrade, false);
+});
+
+test("getShipyardView atMax flags correctly when at max upgrade level", () => {
+  let state = {
+    ...createInitialState(),
+    currentPlanetId: "luna",
+    credits: 100000,
+    cargo: { shipParts: 30 }
+  };
+  // Max out cargo upgrade
+  for (let i = 0; i < 4; i++) {
+    state = upgradeShip(state, "cargo").state;
+  }
+  const view = getShipyardView(state);
+  assert.equal(view.cargoUpgrade.atMax, true);
+  assert.equal(view.cargoUpgrade.canUpgrade, false);
+});
+
+test("getShipyardView cost display values match getUpgradeCost", () => {
+  const state = createInitialState();
+  const view = getShipyardView(state);
+  // At level 0, cargo cost should match level 1 entry
+  assert.equal(view.cargoUpgrade.parts, 3);
+  assert.equal(view.cargoUpgrade.credits, 1500);
+  assert.equal(view.powerUpgrade.parts, 4);
+  assert.equal(view.powerUpgrade.credits, 2500);
 });

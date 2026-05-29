@@ -1,4 +1,4 @@
-import { isWeaponAvailable, totalAllocation } from './rules.js';
+import { isWeaponAvailable, runAwayChance } from './rules.js';
 
 // Both strategies are pure functions of (ownShip, enemyShip, rng).
 // They return { allocation, action }.
@@ -10,7 +10,7 @@ export function randomAI(ownShip, _enemyShip, rng) {
   const available = ownShip.weapons.filter(isWeaponAvailable);
 
   let action;
-  const options = [...available.map(w => ({ type: 'fire', weaponId: w.id })), { type: 'brace' }, { type: 'hold' }];
+  const options = [...available.map(w => ({ type: 'fire', weaponId: w.id })), { type: 'brace' }];
   const idx = Math.floor(rng.next() * options.length);
   action = options[idx];
 
@@ -19,26 +19,33 @@ export function randomAI(ownShip, _enemyShip, rng) {
 
 // ── Scripted Aggressor AI ────────────────────────────────────────────────────
 
-export function aggressorAI(ownShip, _enemyShip, _rng) {
-  const allocation = aggressorAllocation(ownShip.powerCapacity);
-  const action = aggressorAction(ownShip);
+export function aggressorAI(ownShip, enemyShip, rng) {
+  const allocation = aggressorAllocation(ownShip.powerCapacity, ownShip);
+  const action = aggressorAction({ ...ownShip, allocation }, enemyShip, rng);
   return { allocation, action };
 }
 
-// Aggressor splits: 50% weapons, 25% shields, remainder split between sensors
-// and engines (sensors first for tie-breaking).
-function aggressorAllocation(powerCapacity) {
-  const weaponsPts = Math.floor(powerCapacity * 0.5);
-  const shieldPts = Math.floor(powerCapacity * 0.25);
-  const remainder = powerCapacity - weaponsPts - shieldPts;
+// Aggressor repairs damaged hull, then splits remaining power toward weapons,
+// shields, sensors, and engines.
+function aggressorAllocation(powerCapacity, ship) {
+  const repairPts = ship && ship.hull < ship.hullMax ? Math.min(3, Math.max(1, Math.floor(powerCapacity * 0.25))) : 0;
+  const remainingPower = powerCapacity - repairPts;
+  const weaponsPts = Math.floor(remainingPower * 0.5);
+  const shieldPts = Math.floor(remainingPower * 0.25);
+  const remainder = remainingPower - weaponsPts - shieldPts;
   const sensorsPts = Math.ceil(remainder / 2);
   const enginesPts = remainder - sensorsPts;
-  return { weapons: weaponsPts, shields: shieldPts, sensors: sensorsPts, engines: enginesPts, repair: 0 };
+  return { weapons: weaponsPts, shields: shieldPts, sensors: sensorsPts, engines: enginesPts, repair: repairPts };
 }
 
-// Aggressor fires highest-baseDamage available weapon.
-// Braces if shield < 20% of max AND no weapon is available.
-function aggressorAction(ownShip) {
+// Aggressor may run when badly damaged, otherwise fires the highest-baseDamage
+// available weapon. Braces if shield < 20% of max and no weapon is available.
+function aggressorAction(ownShip, _enemyShip, rng) {
+  const hullRatio = ownShip.hullMax > 0 ? ownShip.hull / ownShip.hullMax : 1;
+  if (hullRatio <= 0.35 && rng.next() < 0.45) {
+    return { type: 'run', chance: runAwayChance(ownShip) };
+  }
+
   const available = ownShip.weapons.filter(isWeaponAvailable);
   if (available.length > 0) {
     const best = available.reduce((a, b) => (a.baseDamage >= b.baseDamage ? a : b));
@@ -47,7 +54,7 @@ function aggressorAction(ownShip) {
   if (ownShip.shield < ownShip.shieldMax * 0.2) {
     return { type: 'brace' };
   }
-  return { type: 'hold' };
+  return { type: 'brace' };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

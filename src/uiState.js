@@ -8,12 +8,23 @@ import {
   getCargoRemaining,
   getCargoUsed,
   getDestinations,
+  getEmergencyFuelQuote,
+  getEffectiveCargoCapacity,
+  getEffectivePowerCapacity,
   getMarketPrice,
   getOwnedQuantity,
   getPlanet,
   getTravelCost
 } from "./game.js";
+import { getActiveMarketEvents, getMarketModifier } from "./events.js";
 import { getEncounterChance } from "./travelCombat.js";
+import {
+  canBuyShip,
+  canUpgrade,
+  getShipCatalog,
+  getUpgradeCost,
+  getUpgradeSpec
+} from "./shipyard.js";
 
 export const MAP_MARKER_COLORS = {
   current: "#f4f0e8",
@@ -71,19 +82,21 @@ export function getStatusView(state) {
 export function getMarketRows(state) {
   const planet = getPlanet(state.currentPlanetId);
   return resources.map((resource) => {
-    const price = getMarketPrice(planet.id, resource.id);
+    const price = getMarketPrice(planet.id, resource.id, state.currentDate);
+    const modifierPercent = getMarketModifier(state.currentDate, planet.id, resource.id);
     const owned = resource.id === FUEL_RESOURCE_ID ? state.fuel : getOwnedQuantity(state, resource.id);
     const affordableQuantity = Math.floor(state.credits / price);
     const buyMax = resource.id === FUEL_RESOURCE_ID
       ? affordableQuantity
       : Math.min(affordableQuantity, getCargoRemaining(state));
-    const sellMax = resource.id === FUEL_RESOURCE_ID ? 0 : owned;
+    const sellMax = owned;
 
     return {
       id: resource.id,
       name: resource.name,
       price,
-      priceLabel: formatCredits(price),
+      priceLabel: `${formatCredits(price)}${formatModifier(modifierPercent)}`,
+      modifierPercent,
       owned,
       producedHere: planet.produces.includes(resource.id),
       buyMax,
@@ -97,20 +110,29 @@ export function getMarketRows(state) {
 }
 
 export function getDestinationRows(state) {
-  return getDestinations(state.currentPlanetId).map((planet) => ({
-    id: planet.id,
-    name: planet.name,
-    type: planet.type,
-    factionAlignment: planet.factionAlignment,
-    riskLevel: planet.riskLevel,
-    fuelCost: getTravelCost(state.currentPlanetId, planet.id),
-    encounterChance: getEncounterChance(state, planet.id),
-    encounterRiskLabel: `${Math.round(getEncounterChance(state, planet.id) * 100)}% battle risk`,
-    travelDurationDays: planet.travelDurationDays,
-    travelDurationLabel: formatDuration(planet.travelDurationDays),
-    canTravel: state.fuel >= getTravelCost(state.currentPlanetId, planet.id),
-    requiresConfirmation: !state.tradedAtCurrentLocation
-  }));
+  return getDestinations(state.currentPlanetId).map((planet) => {
+    const fuelCost = getTravelCost(state.currentPlanetId, planet.id);
+    const emergencyFuel = getEmergencyFuelQuote(state, planet.id);
+    return {
+      id: planet.id,
+      name: planet.name,
+      type: planet.type,
+      factionAlignment: planet.factionAlignment,
+      riskLevel: planet.riskLevel,
+      fuelCost,
+      encounterChance: getEncounterChance(state, planet.id),
+      encounterRiskLabel: `${Math.round(getEncounterChance(state, planet.id) * 100)}% battle risk`,
+      travelDurationDays: planet.travelDurationDays,
+      travelDurationLabel: formatDuration(planet.travelDurationDays),
+      canTravel: state.fuel >= fuelCost,
+      requiresConfirmation: !state.tradedAtCurrentLocation,
+      emergencyFuel: {
+        ...emergencyFuel,
+        totalLabel: formatCredits(emergencyFuel.total),
+        unitPriceLabel: formatCredits(emergencyFuel.unitPrice)
+      }
+    };
+  });
 }
 
 export function getCargoRows(state) {
@@ -121,6 +143,15 @@ export function getCargoRows(state) {
       name: resource.name,
       quantity: getOwnedQuantity(state, resource.id)
     }));
+}
+
+export function getNewsRows(state) {
+  return getActiveMarketEvents(state.currentDate).map((event) => ({
+    id: event.id,
+    headline: event.headline,
+    body: event.body,
+    dateRange: `${formatDate(event.startsOn)} - ${formatDate(event.endsOn)}`
+  }));
 }
 
 export function getPlanetMapView(state) {
@@ -165,6 +196,71 @@ export function getMapLegendRows() {
   ];
 }
 
+export function getShipyardView(state) {
+  const planet = getPlanet(state.currentPlanetId);
+  const isIndustrial = planet.industrial === true;
+
+  const currentClassId = state.playerCombatShip?.classId ?? 'vanguard';
+  const effectivePower = getEffectivePowerCapacity(state);
+  const effectiveCargo = getEffectiveCargoCapacity(state);
+  const upgradeLevels = state.shipUpgrades ?? { cargo: 0, power: 0 };
+
+  // Build upgrade options for each kind
+  const cargoSpec = getUpgradeSpec('cargo');
+  const powerSpec = getUpgradeSpec('power');
+  const cargoCost = getUpgradeCost(state, 'cargo');
+  const powerCost = getUpgradeCost(state, 'power');
+  const cargoCheck = canUpgrade(state, 'cargo');
+  const powerCheck = canUpgrade(state, 'power');
+
+  // Build ship catalog rows
+  const catalog = getShipCatalog().map((entry) => {
+    const buyCheck = canBuyShip(state, entry.classId);
+    return {
+      ...entry,
+      isCurrent: entry.classId === currentClassId,
+      canBuy: buyCheck.ok,
+      buyReason: buyCheck.reason,
+      priceLabel: `${new Intl.NumberFormat("en-US").format(entry.price)} cr`
+    };
+  });
+
+  return {
+    isIndustrial,
+    planetName: planet.name,
+    currentShip: {
+      classId: currentClassId,
+      effectivePower,
+      effectiveCargo,
+      cargoUpgradeLevel: upgradeLevels.cargo,
+      powerUpgradeLevel: upgradeLevels.power,
+      cargoUpgradeMax: cargoSpec.max,
+      powerUpgradeMax: powerSpec.max
+    },
+    cargoUpgrade: {
+      currentLevel: upgradeLevels.cargo,
+      max: cargoSpec.max,
+      atMax: cargoCost.atMax ?? false,
+      nextLevel: cargoCost.nextLevel,
+      parts: cargoCost.parts,
+      credits: cargoCost.credits,
+      canUpgrade: cargoCheck.ok,
+      reason: cargoCheck.reason
+    },
+    powerUpgrade: {
+      currentLevel: upgradeLevels.power,
+      max: powerSpec.max,
+      atMax: powerCost.atMax ?? false,
+      nextLevel: powerCost.nextLevel,
+      parts: powerCost.parts,
+      credits: powerCost.credits,
+      canUpgrade: powerCheck.ok,
+      reason: powerCheck.reason
+    },
+    catalog
+  };
+}
+
 function getSliderView(max) {
   return {
     min: max > 0 ? 1 : 0,
@@ -173,6 +269,11 @@ function getSliderView(max) {
     disabled: max <= 0,
     label: max > 0 ? "1" : "0"
   };
+}
+
+function formatModifier(modifierPercent) {
+  if (modifierPercent === 0) return "";
+  return modifierPercent > 0 ? ` +${modifierPercent}%` : ` ${modifierPercent}%`;
 }
 
 function getMapBounds(mapPlanets) {

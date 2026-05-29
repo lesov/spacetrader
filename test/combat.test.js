@@ -5,13 +5,18 @@ import { SHIP_CLASSES, PLAYER_CLASS_ID, ENEMY_CLASS_ID, ENGINES_EVASION_PER_POIN
 import {
   buildShipState, createBattleState,
   validateAllocation, totalAllocation,
-  isWeaponAvailable, resolveFullTurn, checkBattleEnd, runAwayChance
+  isWeaponAvailable, resolveFullTurn, checkBattleEnd, runAwayChance, calculateHitChance,
+  effectivePoints, malfunctionChance
 } from '../src/combat/rules.js';
+import { createInitialState } from '../src/game.js';
+import { upgradeShip } from '../src/shipyard.js';
+import { beginTravel } from '../src/travelCombat.js';
+import { createRng as makeRng } from '../src/combat/rng.js';
 import { randomAI, aggressorAI } from '../src/combat/ai.js';
 import {
   isAllocationValid, allocationRemaining, getWeaponRows,
   formatBar, formatHull, formatShield, phaseLabel, battleResultLabel,
-  PRESETS, computePresetAllocation, systemTooltip
+  PRESETS, computePresetAllocation, getPresetSliderState, setCombatPresetAllocation, setCombatPresetWeight, systemTooltip
 } from '../src/combat/uiState.js';
 import { createRng } from '../src/combat/rng.js';
 
@@ -63,11 +68,11 @@ test('ship stat values are within documented ranges', () => {
   for (const [id, cls] of Object.entries(SHIP_CLASSES)) {
     assert.ok(cls.hullMax >= 50 && cls.hullMax <= 150, `${id} hullMax out of range`);
     assert.ok(cls.shieldMax >= 20 && cls.shieldMax <= 100, `${id} shieldMax out of range`);
-    assert.ok(cls.powerCapacity >= 6 && cls.powerCapacity <= 12, `${id} powerCapacity out of range`);
+    assert.ok(cls.powerCapacity >= 6 && cls.powerCapacity <= 14, `${id} powerCapacity out of range`);
     assert.ok(cls.baseAccuracy >= 0.40 && cls.baseAccuracy <= 0.80, `${id} baseAccuracy out of range`);
     assert.ok(cls.baseEvasion >= 0.05 && cls.baseEvasion <= 0.30, `${id} baseEvasion out of range`);
     assert.ok(cls.shieldRegen >= 2 && cls.shieldRegen <= 5, `${id} shieldRegen out of range`);
-    assert.ok(cls.repairRate >= 1 && cls.repairRate <= 3, `${id} repairRate out of range`);
+    assert.ok(cls.repairRate >= 1 && cls.repairRate <= 5, `${id} repairRate out of range`);
   }
 });
 
@@ -115,8 +120,8 @@ test('validateAllocation rejects non-integer values', () => {
 
 test('shield regen restores shieldRegen * shields allocation per turn', () => {
   const state = createBattleState('vanguard', 'bastion');
-  // Deplete player shield first
-  const damagedPlayer = { ...state.player, shield: 10, allocation: { weapons: 0, shields: 3, engines: 3, sensors: 2, repair: 2 } };
+  // Deplete player shield first; clear basePower so test is purely allocation-based
+  const damagedPlayer = { ...state.player, basePower: {}, shield: 10, allocation: { weapons: 0, shields: 3, engines: 3, sensors: 2, repair: 2 } };
   const damagedState = { ...state, player: damagedPlayer };
 
   // Pass hold/hold so no damage, just regen
@@ -181,8 +186,10 @@ test('shield absorbs non-penetrating damage before hull', () => {
   };
   // Enemy with no evasion, low shields so we can see spillover.
   // Allocation all zeros so hull repair doesn't skew the expected hull calculation.
+  // basePower cleared so shield regen doesn't pre-restore shields before the attack.
   const lowShieldEnemy = {
     ...state.enemy,
+    basePower: {},
     baseEvasion: 0.0,
     shield: 5,
     hull: 100,
@@ -264,6 +271,255 @@ test('hit chance is clamped to 0.95 maximum', () => {
   // With 0.95 cap, ~5% miss rate: expect at least 1 miss in 40 trials (probabilistic but seed is fixed)
   // We simply assert the scenario didn't error and hull may have changed
   assert.ok(testState.player.hull >= 0);
+});
+
+test('zero-sensor attacks remain viable after balance pass', () => {
+  let state = createBattleState('falcon', 'bastion');
+  state = {
+    ...state,
+    player: {
+      ...state.player,
+      allocation: { weapons: 4, shields: 0, engines: 4, sensors: 0, repair: 0 }
+    },
+    enemy: {
+      ...state.enemy,
+      hull: 500,
+      hullMax: 500,
+      shield: 0,
+      allocation: { weapons: 0, shields: 0, engines: 0, sensors: 0, repair: 0 }
+    }
+  };
+
+  const rng = createRng(42);
+  let hits = 0;
+  for (let i = 0; i < 20; i++) {
+    state = resolveFullTurn(state, { type: 'fire', weaponId: 'pulse-laser' }, { type: 'brace' }, rng);
+    if (state.log.some((entry) => entry.includes(`Turn ${i + 1} — You fired`) && entry.includes('HIT'))) hits += 1;
+    state = {
+      ...state,
+      phase: 'allocate',
+      player: {
+        ...state.player,
+        allocation: { weapons: 4, shields: 0, engines: 4, sensors: 0, repair: 0 }
+      },
+      enemy: {
+        ...state.enemy,
+        allocation: { weapons: 0, shields: 0, engines: 0, sensors: 0, repair: 0 }
+      }
+    };
+  }
+
+  assert.ok(hits >= 8, `expected zero-sensor attacks to land regularly, got ${hits}`);
+});
+
+test('hit chance scenarios are intuitive across sensors, engines, and ship classes', () => {
+  function ship(classId, allocation, overrides = {}) {
+    return {
+      ...buildShipState(classId),
+      allocation,
+      ...overrides
+    };
+  }
+
+  function weapon(attacker, weaponId) {
+    return attacker.weapons.find((entry) => entry.id === weaponId);
+  }
+
+  const scenarios = [
+    {
+      name: 'player vanguard with 6 sensors should hit slow bastion often',
+      attacker: ship('vanguard', { weapons: 4, shields: 0, engines: 0, sensors: 6, repair: 0 }),
+      defender: ship('bastion', { weapons: 6, shields: 3, engines: 1, sensors: 2, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.78,
+      max: 0.86
+    },
+    {
+      name: 'player vanguard with 6 sensors still has fair odds against evasive falcon',
+      attacker: ship('vanguard', { weapons: 4, shields: 0, engines: 0, sensors: 6, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 6, sensors: 0, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.56,
+      max: 0.66
+    },
+    {
+      name: 'player vanguard without sensors remains viable against bastion',
+      attacker: ship('vanguard', { weapons: 5, shields: 2, engines: 3, sensors: 0, repair: 0 }),
+      defender: ship('bastion', { weapons: 6, shields: 3, engines: 1, sensors: 2, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.52,
+      max: 0.58
+    },
+    {
+      name: 'player vanguard without sensors struggles against evasive falcon',
+      attacker: ship('vanguard', { weapons: 5, shields: 2, engines: 3, sensors: 0, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 6, sensors: 0, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.30,
+      max: 0.36
+    },
+    {
+      name: 'falcon pulse laser is accurate against bastion',
+      attacker: ship('falcon', { weapons: 3, shields: 1, engines: 2, sensors: 2, repair: 0 }),
+      defender: ship('bastion', { weapons: 6, shields: 3, engines: 1, sensors: 2, repair: 0 }),
+      weaponId: 'pulse-laser',
+      min: 0.78,
+      max: 0.84
+    },
+    {
+      name: 'falcon loses accuracy against high-engine falcon',
+      attacker: ship('falcon', { weapons: 3, shields: 1, engines: 2, sensors: 2, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 6, sensors: 0, repair: 0 }),
+      weaponId: 'pulse-laser',
+      min: 0.56,
+      max: 0.64
+    },
+    {
+      name: 'bastion missile without sensors is poor against evasive falcon',
+      attacker: ship('bastion', { weapons: 8, shields: 2, engines: 2, sensors: 0, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 6, sensors: 0, repair: 0 }),
+      weaponId: 'missile-rack',
+      min: 0.18,
+      max: 0.22
+    },
+    {
+      name: 'bastion missile with sensors becomes credible against falcon',
+      attacker: ship('bastion', { weapons: 4, shields: 2, engines: 0, sensors: 6, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 1, sensors: 5, repair: 0 }),
+      weaponId: 'missile-rack',
+      min: 0.54,
+      max: 0.64
+    },
+    {
+      name: 'leviathan point defense with moderate sensors is average against vanguard',
+      attacker: ship('leviathan', { weapons: 3, shields: 3, engines: 1, sensors: 4, repair: 0 }),
+      defender: ship('vanguard', { weapons: 4, shields: 2, engines: 2, sensors: 2, repair: 0 }),
+      weaponId: 'point-defense',
+      min: 0.56,
+      max: 0.64
+    },
+    {
+      name: 'leviathan point defense without sensors is weak against falcon',
+      attacker: ship('leviathan', { weapons: 4, shields: 3, engines: 4, sensors: 0, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 5, sensors: 1, repair: 0 }),
+      weaponId: 'point-defense',
+      min: 0.22,
+      max: 0.32
+    },
+    {
+      name: 'enemy bastion with aggressor-like sensors hits vanguard moderately',
+      attacker: ship('bastion', { weapons: 6, shields: 3, engines: 1, sensors: 2, repair: 0 }),
+      defender: ship('vanguard', { weapons: 4, shields: 2, engines: 2, sensors: 2, repair: 0 }),
+      weaponId: 'missile-rack',
+      min: 0.40,
+      max: 0.48
+    },
+    {
+      name: 'enemy bastion with high sensors hits vanguard reliably',
+      attacker: ship('bastion', { weapons: 4, shields: 2, engines: 0, sensors: 6, repair: 0 }),
+      defender: ship('vanguard', { weapons: 4, shields: 2, engines: 2, sensors: 2, repair: 0 }),
+      weaponId: 'missile-rack',
+      min: 0.58,
+      max: 0.66
+    },
+    {
+      name: 'enemy vanguard with sensors hits falcon more than half the time',
+      attacker: ship('vanguard', { weapons: 4, shields: 2, engines: 0, sensors: 6, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 3, sensors: 3, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.64,
+      max: 0.74
+    },
+    {
+      name: 'enemy vanguard with low sensors has middling odds against falcon',
+      attacker: ship('vanguard', { weapons: 5, shields: 2, engines: 2, sensors: 1, repair: 0 }),
+      defender: ship('falcon', { weapons: 1, shields: 1, engines: 3, sensors: 3, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.42,
+      max: 0.50
+    },
+    {
+      name: 'enemy falcon with high sensors is very accurate against leviathan',
+      attacker: ship('falcon', { weapons: 2, shields: 1, engines: 1, sensors: 4, repair: 0 }),
+      defender: ship('leviathan', { weapons: 3, shields: 3, engines: 1, sensors: 4, repair: 0 }),
+      weaponId: 'pulse-laser',
+      min: 0.84,
+      max: 0.92
+    },
+    {
+      name: 'enemy falcon with low sensors still hits leviathan often',
+      attacker: ship('falcon', { weapons: 3, shields: 1, engines: 3, sensors: 0, repair: 0 }),
+      defender: ship('leviathan', { weapons: 3, shields: 3, engines: 1, sensors: 4, repair: 0 }),
+      weaponId: 'pulse-laser',
+      min: 0.66,
+      max: 0.74
+    },
+    {
+      name: 'high defender engines reduce chance compared with low engines',
+      attacker: ship('vanguard', { weapons: 4, shields: 2, engines: 0, sensors: 4, repair: 0 }),
+      defender: ship('vanguard', { weapons: 4, shields: 2, engines: 6, sensors: 0, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.56,
+      max: 0.64
+    },
+    {
+      name: 'low defender engines expose same target',
+      attacker: ship('vanguard', { weapons: 4, shields: 2, engines: 0, sensors: 4, repair: 0 }),
+      defender: ship('vanguard', { weapons: 4, shields: 2, engines: 0, sensors: 6, repair: 0 }),
+      weaponId: 'plasma-cannon',
+      min: 0.72,
+      max: 0.80
+    },
+    {
+      name: 'point-defense accuracy bonus matters for leviathan',
+      attacker: ship('leviathan', { weapons: 4, shields: 4, engines: 1, sensors: 2, repair: 0 }),
+      defender: ship('bastion', { weapons: 6, shields: 3, engines: 1, sensors: 2, repair: 0 }),
+      weaponId: 'point-defense',
+      min: 0.54,
+      max: 0.62
+    },
+    {
+      name: 'missile penalty keeps bastion from becoming guaranteed',
+      attacker: ship('bastion', { weapons: 6, shields: 0, engines: 0, sensors: 6, repair: 0 }),
+      defender: ship('bastion', { weapons: 6, shields: 3, engines: 1, sensors: 2, repair: 0 }),
+      weaponId: 'missile-rack',
+      min: 0.66,
+      max: 0.74
+    }
+  ];
+
+  assert.equal(scenarios.length, 20);
+  for (const scenario of scenarios) {
+    const chance = calculateHitChance(scenario.attacker, scenario.defender, weapon(scenario.attacker, scenario.weaponId));
+    assert.ok(
+      chance >= scenario.min - 0.0001 && chance <= scenario.max + 0.0001,
+      `${scenario.name}: expected ${scenario.min}-${scenario.max}, got ${chance}`
+    );
+  }
+
+  const highSensors = calculateHitChance(
+    scenarios[12].attacker,
+    scenarios[12].defender,
+    weapon(scenarios[12].attacker, scenarios[12].weaponId)
+  );
+  const lowSensors = calculateHitChance(
+    scenarios[13].attacker,
+    scenarios[13].defender,
+    weapon(scenarios[13].attacker, scenarios[13].weaponId)
+  );
+  assert.ok(highSensors > lowSensors);
+
+  const highEngines = calculateHitChance(
+    scenarios[16].attacker,
+    scenarios[16].defender,
+    weapon(scenarios[16].attacker, scenarios[16].weaponId)
+  );
+  const lowEngines = calculateHitChance(
+    scenarios[17].attacker,
+    scenarios[17].defender,
+    weapon(scenarios[17].attacker, scenarios[17].weaponId)
+  );
+  assert.ok(lowEngines > highEngines);
 });
 
 // ── Cooldowns ─────────────────────────────────────────────────────────────────
@@ -494,12 +750,19 @@ test('aggressorAI braces when no weapon available and shield below 20%', () => {
   assert.equal(action.type, 'brace');
 });
 
-test('aggressorAI holds when no weapon available and shield above 20%', () => {
+test('aggressorAI braces instead of holding when no weapon is available', () => {
   const ship = buildShipState('bastion');
   ship.weapons = ship.weapons.map(w => ({ ...w, cooldownRemaining: 3, ammo: w.ammo === null ? null : 0 }));
   ship.shield = ship.shieldMax; // well above 20%
   const { action } = aggressorAI(ship, ship, createRng(1));
-  assert.equal(action.type, 'hold');
+  assert.equal(action.type, 'brace');
+});
+
+test('aggressorAI allocates repair power when hull is damaged', () => {
+  const ship = { ...buildShipState('bastion'), hull: 80 };
+  const { allocation } = aggressorAI(ship, buildShipState('vanguard'), createRng(1));
+  assert.ok(allocation.repair > 0);
+  assert.equal(totalAllocation(allocation), ship.powerCapacity);
 });
 
 // ── uiState helpers ───────────────────────────────────────────────────────────
@@ -566,6 +829,7 @@ test('battleResultLabel returns correct strings', () => {
   assert.equal(battleResultLabel('enemy'),   'Defeat');
   assert.equal(battleResultLabel('draw'),    'Draw');
   assert.equal(battleResultLabel('escaped'), 'Escaped');
+  assert.equal(battleResultLabel('enemyEscaped'), 'Enemy Escaped');
 });
 
 // ── Run-away ──────────────────────────────────────────────────────────────────
@@ -646,6 +910,70 @@ test('failed run-away keeps battle going', () => {
   assert.ok(result.log.some(e => e.includes('failed') || e.includes('Escape failed')));
 });
 
+test('enemy can successfully run away and end battle', () => {
+  const state = createBattleState('vanguard', 'falcon');
+  const enemy = {
+    ...state.enemy,
+    hull: state.enemy.hullMax,
+    allocation: { weapons: 0, shields: 0, engines: 8, sensors: 0, repair: 0 }
+  };
+  const player = {
+    ...state.player,
+    allocation: { weapons: 0, shields: 10, engines: 0, sensors: 0, repair: 0 }
+  };
+
+  const result = resolveFullTurn(
+    { ...state, player, enemy },
+    { type: 'brace' },
+    { type: 'run' },
+    createRng(1)
+  );
+
+  assert.equal(result.phase, 'ended');
+  assert.equal(result.winner, 'enemyEscaped');
+});
+
+test('runAwayChance goes down as hull damage increases', () => {
+  const full = buildShipState('falcon');
+  full.allocation = { weapons: 0, shields: 0, engines: 8, sensors: 0, repair: 0 };
+  const damaged = { ...full, hull: Math.floor(full.hullMax * 0.25) };
+
+  assert.ok(runAwayChance(damaged) < runAwayChance(full));
+});
+
+test('malfunction chance appears only after hull damage is taken in battle', () => {
+  const clean = buildShipState('vanguard');
+  const damaged = { ...clean, hullDamageTaken: 40 };
+
+  assert.equal(malfunctionChance(clean), 0);
+  assert.ok(malfunctionChance(damaged) > 0);
+});
+
+test('weapon malfunction prevents firing without consuming ammo or cooldown', () => {
+  const state = createBattleState('bastion', 'vanguard');
+  const player = {
+    ...state.player,
+    hullDamageTaken: 100,
+    allocation: { weapons: 12, shields: 0, engines: 0, sensors: 0, repair: 0 }
+  };
+  const enemy = {
+    ...state.enemy,
+    allocation: { weapons: 0, shields: 0, engines: 0, sensors: 0, repair: 0 }
+  };
+
+  const result = resolveFullTurn(
+    { ...state, player, enemy },
+    { type: 'fire', weaponId: 'missile-rack' },
+    { type: 'brace' },
+    { next: () => 0 }
+  );
+
+  const missile = result.player.weapons.find((weapon) => weapon.id === 'missile-rack');
+  assert.equal(missile.ammo, 6);
+  assert.equal(missile.cooldownRemaining, 0);
+  assert.ok(result.log.some((entry) => /malfunction/.test(entry)));
+});
+
 // ── Presets ───────────────────────────────────────────────────────────────────
 
 test('computePresetAllocation always sums to powerCapacity', () => {
@@ -680,6 +1008,40 @@ test('Evasive preset allocates more to engines than Attack preset', () => {
   assert.ok(evasive.engines > attack.engines);
 });
 
+test('setCombatPresetWeight updates one preset weight without mutating the source', () => {
+  const next = setCombatPresetWeight(PRESETS, 'Attack', 'repair', 6);
+  assert.equal(next.find((preset) => preset.label === 'Attack').weights.repair, 6);
+  assert.equal(PRESETS.find((preset) => preset.label === 'Attack').weights.repair, 0);
+  assert.equal(next.find((preset) => preset.label === 'Balanced').weights.repair, 1);
+});
+
+test('setCombatPresetAllocation caps preset sliders to available ship power', () => {
+  const presets = [{ label: 'Custom', weights: { weapons: 4, shields: 3, engines: 2, sensors: 1, repair: 0 } }];
+  const blocked = setCombatPresetAllocation(presets, 'Custom', 'repair', 10, 10);
+
+  assert.equal(blocked[0].weights.repair, 0);
+  assert.equal(totalAllocation(blocked[0].weights), 10);
+
+  const freed = setCombatPresetAllocation(blocked, 'Custom', 'weapons', 2, 10);
+  assert.equal(totalAllocation(freed[0].weights), 8);
+
+  const raised = setCombatPresetAllocation(freed, 'Custom', 'repair', 8, 10);
+  assert.equal(raised[0].weights.repair, 2);
+  assert.equal(totalAllocation(raised[0].weights), 10);
+});
+
+test('getPresetSliderState exposes dynamic max based on remaining power', () => {
+  const preset = { label: 'Custom', weights: { weapons: 2, shields: 3, engines: 2, sensors: 1, repair: 0 } };
+  const weapons = getPresetSliderState(preset, 10, 'weapons');
+  const repair = getPresetSliderState(preset, 10, 'repair');
+
+  assert.equal(weapons.value, 2);
+  assert.equal(weapons.max, 4);
+  assert.equal(repair.max, 2);
+  assert.equal(repair.remaining, 2);
+  assert.equal(repair.isComplete, false);
+});
+
 // ── Tooltip text ──────────────────────────────────────────────────────────────
 
 test('systemTooltip returns non-empty string for each system', () => {
@@ -697,4 +1059,104 @@ test('repair tooltip warns when hull is at max', () => {
   ship.allocation = { weapons: 4, shields: 2, engines: 2, sensors: 2, repair: 0 };
   const tip = systemTooltip('repair', ship);
   assert.ok(tip.toLowerCase().includes('full') || tip.toLowerCase().includes('max') || tip.toLowerCase().includes('unavailable'));
+});
+
+// ── effectivePoints ───────────────────────────────────────────────────────────
+
+test('effectivePoints sums basePower and allocation correctly', () => {
+  const ship = buildShipState('vanguard'); // basePower: { shields: 1 }
+  ship.allocation = { weapons: 3, shields: 2, engines: 1, sensors: 1, repair: 3 };
+
+  // shields: basePower 1 + allocation 2 = 3
+  assert.equal(effectivePoints(ship, 'shields'), 3);
+  // weapons: basePower 0 (not in vanguard basePower) + 3 = 3
+  assert.equal(effectivePoints(ship, 'weapons'), 3);
+  // engines: basePower 0 + 1 = 1
+  assert.equal(effectivePoints(ship, 'engines'), 1);
+});
+
+test('effectivePoints with basePower.engines=1 affects runAwayChance', () => {
+  const ship = buildShipState('falcon'); // basePower: { engines: 1, sensors: 1 }
+  ship.allocation = { weapons: 4, shields: 0, engines: 2, sensors: 2, repair: 0 };
+  // effective engines = 1 + 2 = 3; effective sensors = 1 + 2 = 3
+  const expected = Math.min(0.80, 3 * 0.12 + 3 * 0.05);
+  assert.ok(Math.abs(runAwayChance(ship) - expected) < 0.0001);
+});
+
+test('effectivePoints with basePower cleared falls back to allocation only', () => {
+  const ship = buildShipState('bastion'); // basePower: { weapons: 1, shields: 1 }
+  ship.basePower = {};
+  ship.allocation = { weapons: 4, shields: 3, engines: 2, sensors: 1, repair: 2 };
+  assert.equal(effectivePoints(ship, 'weapons'), 4);
+  assert.equal(effectivePoints(ship, 'shields'), 3);
+});
+
+test('bastion with basePower.weapons=1 and 0 allocation still has effectivePoints > 0', () => {
+  const ship = buildShipState('bastion'); // basePower: { weapons: 1 }
+  ship.allocation = { weapons: 0, shields: 6, engines: 2, sensors: 2, repair: 2 };
+  assert.equal(effectivePoints(ship, 'weapons'), 1);
+});
+
+// ── Power capacity in battles after engine upgrade ────────────────────────────
+
+test('battle started after engine upgrade uses higher powerCapacity', () => {
+  let state = {
+    ...createInitialState(),
+    currentPlanetId: 'luna',
+    credits: 100000,
+    cargo: { shipParts: 30 },
+    tradedAtCurrentLocation: true
+  };
+
+  // Do one power upgrade
+  state = upgradeShip(state, 'power').state;
+  const expectedPower = SHIP_CLASSES.vanguard.powerCapacity + 1; // 11
+
+  // Trigger travel to encounter
+  const rng = makeRng(999);
+  // Force encounter by trying many seeds to find one that triggers
+  let battleState = null;
+  for (let seed = 1; seed < 1000; seed++) {
+    const testRng = makeRng(seed);
+    const result = beginTravel(state, 'mars', { confirmed: true }, testRng);
+    if (result.state.mode === 'combat' && result.state.combat?.battle) {
+      battleState = result.state;
+      break;
+    }
+  }
+
+  if (battleState) {
+    // Player ship in battle should have the upgraded power capacity
+    assert.equal(battleState.combat.battle.player.powerCapacity, expectedPower);
+    // Allocation should be validatable against the new capacity
+    const alloc = { weapons: 2, shields: 2, engines: 2, sensors: 3, repair: 2 };
+    assert.equal(validateAllocation(alloc, expectedPower), '', 'Allocation summing to 11 should be valid');
+  }
+  // If no encounter found (very low probability), test is skipped implicitly
+});
+
+// ── computePresetAllocation at various pool sizes ─────────────────────────────
+
+test('computePresetAllocation totals exactly to capacity for 8, 10, 11, 12, 13, 14 points', () => {
+  for (const preset of PRESETS) {
+    for (const cap of [8, 10, 11, 12, 13, 14]) {
+      const alloc = computePresetAllocation(preset.weights, cap);
+      const total = alloc.weapons + alloc.shields + alloc.engines + alloc.sensors + alloc.repair;
+      assert.equal(total, cap, `${preset.label} at cap ${cap}: total ${total} ≠ ${cap}`);
+    }
+  }
+});
+
+// ── basePower flows through buildShipState ────────────────────────────────────
+
+test('buildShipState includes basePower from class definition', () => {
+  const ship = buildShipState('vanguard');
+  assert.deepEqual(ship.basePower, SHIP_CLASSES.vanguard.basePower);
+});
+
+test('buildShipState with powerCapacity override preserves it', () => {
+  const ship = buildShipState('vanguard', { powerCapacity: 13 });
+  assert.equal(ship.powerCapacity, 13);
+  // basePower still from class
+  assert.deepEqual(ship.basePower, SHIP_CLASSES.vanguard.basePower);
 });

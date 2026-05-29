@@ -176,8 +176,18 @@ h3 {
 .preset-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 14px;
+}
+
+.preset-card {
+  display: grid;
+  gap: 8px;
+  min-width: min(240px, 100%);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(7, 8, 13, 0.48);
 }
 
 .preset-btn {
@@ -192,6 +202,31 @@ h3 {
 .preset-btn:hover:not(:disabled) {
   border-color: var(--teal);
   background: rgba(106, 211, 209, 0.12);
+}
+
+.preset-controls {
+  display: grid;
+  gap: 5px;
+}
+
+.preset-weight {
+  display: grid;
+  grid-template-columns: 58px minmax(80px, 1fr) 24px;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.preset-weight input {
+  width: 100%;
+  accent-color: var(--teal);
+}
+
+.preset-weight output {
+  color: var(--text);
+  font-weight: 700;
+  text-align: right;
 }
 
 /* ── Allocation panel ────────────────────────────────────────────────────── */
@@ -289,7 +324,6 @@ h3 {
 
 .action-btn.weapon:not(:disabled) { border-color: var(--amber); }
 .action-btn.brace:not(:disabled)  { border-color: var(--teal); }
-.action-btn.hold                   { border-color: var(--line); }
 .action-btn.run                    { border-color: rgba(247, 185, 85, 0.4); color: var(--muted); }
 
 .weapon-note {

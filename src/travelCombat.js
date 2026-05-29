@@ -1,4 +1,4 @@
-import { ENEMY_CLASS_ID, PLAYER_CLASS_ID } from "./combat/data.js";
+import { SHIP_CLASSES, PLAYER_CLASS_ID } from "./combat/data.js";
 import { aggressorAI } from "./combat/ai.js";
 import {
   buildShipState,
@@ -6,14 +6,53 @@ import {
   resolveFullTurn,
   validateAllocation
 } from "./combat/rules.js";
+import { createRng } from "./combat/rng.js";
 import {
   advanceDate,
+  getCargoRemaining,
   getPlanet,
   getTravelDurationDays,
   getTravelCost,
   serializeCombatShip,
   getEffectivePowerCapacity
 } from "./game.js";
+
+// Enemy spawn weights. More powerful classes appear less frequently.
+// Cumulative thresholds: falcon 45%, vanguard 30%, leviathan 15%, bastion 10%.
+const ENEMY_SPAWN_THRESHOLDS = [
+  { classId: "falcon",    threshold: 0.45 },
+  { classId: "vanguard",  threshold: 0.75 },
+  { classId: "leviathan", threshold: 0.90 },
+  { classId: "bastion",   threshold: 1.00 }
+];
+
+// Salvage ranges per enemy class awarded on victory.
+const SALVAGE_BY_CLASS = {
+  falcon:    { creditsMin: 50,  creditsMax: 150, partsMin: 1, partsMax: 3 },
+  vanguard:  { creditsMin: 150, creditsMax: 350, partsMin: 2, partsMax: 5 },
+  leviathan: { creditsMin: 200, creditsMax: 450, partsMin: 3, partsMax: 6 },
+  bastion:   { creditsMin: 350, creditsMax: 700, partsMin: 5, partsMax: 9 }
+};
+
+function rollEnemyClass(rng) {
+  const roll = rng.next();
+  for (const entry of ENEMY_SPAWN_THRESHOLDS) {
+    if (roll < entry.threshold) return entry.classId;
+  }
+  return "bastion";
+}
+
+function rollSalvage(enemyClassId, rng) {
+  const table = SALVAGE_BY_CLASS[enemyClassId] ?? SALVAGE_BY_CLASS.vanguard;
+  return {
+    credits: randInt(table.creditsMin, table.creditsMax, rng.next()),
+    parts:   randInt(table.partsMin,   table.partsMax,   rng.next())
+  };
+}
+
+function randInt(min, max, roll) {
+  return min + Math.floor(roll * (max - min + 1));
+}
 
 export const ENCOUNTER_CHANCE_BY_RISK = {
   low: 0.12,
@@ -109,10 +148,12 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
 
 export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
   const destination = getPlanet(destinationPlanetId);
-  const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, ENEMY_CLASS_ID), state.playerCombatShip, state);
+  const enemyClassId = rollEnemyClass(rng);
+  const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, enemyClassId), state.playerCombatShip, state);
   const seed = Math.floor(rng.next() * 0xffffffff);
   const risk = Math.round(encounter.chance * 100);
-  const message = `Hostile contact en route to ${destination.name}. Battle risk was ${risk}%.`;
+  const enemyLabel = SHIP_CLASSES[enemyClassId]?.label ?? enemyClassId;
+  const message = `Hostile contact en route to ${destination.name}: ${enemyLabel}. Battle risk was ${risk}%.`;
 
   return {
     ok: true,
@@ -130,7 +171,7 @@ export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
         combat: {
           battle,
           rngSeed: seed,
-          enemyClassId: ENEMY_CLASS_ID
+          enemyClassId
         }
       },
       message
@@ -250,7 +291,7 @@ export function resolveIntegratedBattleTurn(state, playerAction, rng) {
   };
 
   if (resolvedBattle.phase === "ended") {
-    return applyBattleOutcome(nextState);
+    return applyBattleOutcome(nextState, rng);
   }
 
   return {
@@ -260,7 +301,7 @@ export function resolveIntegratedBattleTurn(state, playerAction, rng) {
   };
 }
 
-export function applyBattleOutcome(state) {
+export function applyBattleOutcome(state, rng) {
   const battle = state.combat?.battle;
   if (!battle || battle.phase !== "ended") {
     return fail(state, "Battle is not complete.");
@@ -269,10 +310,24 @@ export function applyBattleOutcome(state) {
   if (battle.winner === "player" || battle.winner === "escaped") {
     const destinationId = state.pendingTravel.destinationPlanetId;
     const destination = getPlanet(destinationId);
-    const salvage = battle.winner === "player" ? 100 + state.pendingTravel.fuelCost * 10 : 0;
+
+    let salvageCredits = 0;
+    let salvageParts = 0;
+    if (battle.winner === "player") {
+      const salvageRng = rng ?? createRng(state.combat.rngSeed);
+      const loot = rollSalvage(state.combat.enemyClassId ?? "vanguard", salvageRng);
+      salvageCredits = loot.credits;
+      salvageParts = Math.min(loot.parts, getCargoRemaining(state));
+    }
+
+    const partsText = salvageParts > 0 ? `, ${salvageParts} Ship Parts` : "";
     const outcomeText = battle.winner === "player"
-      ? `Victory near ${destination.name}. Salvage recovered: ${salvage} credits.`
+      ? `Victory near ${destination.name}. Salvage: ${salvageCredits} credits${partsText}.`
       : `Escaped the encounter and continued to ${destination.name}.`;
+
+    const nextCargo = salvageParts > 0
+      ? { ...state.cargo, shipParts: (state.cargo.shipParts ?? 0) + salvageParts }
+      : state.cargo;
 
     return {
       ok: true,
@@ -280,7 +335,8 @@ export function applyBattleOutcome(state) {
       state: completeTravel(
         {
           ...state,
-          credits: state.credits + salvage,
+          credits: state.credits + salvageCredits,
+          cargo: nextCargo,
           playerCombatShip: serializeCombatShip(battle.player, false)
         },
         destinationId,

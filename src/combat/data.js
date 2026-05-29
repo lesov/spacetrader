@@ -124,6 +124,7 @@ export const SHIP_CLASSES = {
   }
 };
 
-// Fixed player vs enemy matchup (per human approver decision 2026-05-28).
+// Player always starts as vanguard. Enemy class is now rolled randomly per encounter
+// (see travelCombat.js); ENEMY_CLASS_ID is kept for combat test fixtures.
 export const PLAYER_CLASS_ID = 'vanguard';
 export const ENEMY_CLASS_ID = 'bastion';

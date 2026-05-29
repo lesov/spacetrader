@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-05-28 CDT - Claude - feature/claude/ship-upgrades-and-purchasing
+
+- Status: ready-for-review
+- Summary: Randomized travel combat enemy class (falcon 45%, vanguard 30%, leviathan 15%, bastion 10%); changed victory salvage from a fixed formula to class-scaled random credits + Ship Parts cargo; encounter message now names the enemy ship class.
+- Files changed: `src/travelCombat.js`, `src/combat/data.js`, `test/travelCombat.test.js`
+- Tests run: `npm test` — 161 pass, 0 fail. `node --check src/travelCombat.js` passed.
+- UI review: pending-human-test
+- Blockers or coordination notes: Work is on `feature/claude/ship-upgrades-and-purchasing`. Enemy class visible in encounter messages; ship parts are capped to available cargo space on award. Do not merge to `main` without explicit human approval.
+
 ## 2026-05-29 00:00 CDT - Claude - feature/claude/ship-upgrades-and-purchasing
 
 - Status: ready-for-review

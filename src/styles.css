@@ -73,6 +73,7 @@ button:disabled {
 .planet-panel,
 .market-panel,
 .cargo-panel,
+.missions-panel,
 .news-panel,
 .log-panel {
   border: 1px solid var(--line);
@@ -405,6 +406,7 @@ h3 {
 
 .market-panel,
 .cargo-panel,
+.missions-panel,
 .news-panel,
 .log-panel {
   padding: 16px;
@@ -501,7 +503,6 @@ h3 {
 
 .side-stack {
   display: grid;
-  grid-template-rows: auto auto minmax(220px, 1fr);
   gap: 18px;
 }
 
@@ -522,6 +523,71 @@ h3 {
 
 .cargo-row strong {
   color: var(--teal);
+}
+
+.accepted-mission,
+.mission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.accepted-mission {
+  margin-bottom: 10px;
+}
+
+.mission-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(7, 8, 13, 0.6);
+}
+
+.mission-card.accepted {
+  border-color: rgba(247, 185, 85, 0.55);
+  background: rgba(247, 185, 85, 0.08);
+}
+
+.mission-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mission-type,
+.mission-reward {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.mission-type {
+  color: var(--teal);
+}
+
+.mission-info strong {
+  font-size: 0.88rem;
+}
+
+.mission-info small,
+.mission-info p {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.mission-reward {
+  color: var(--amber);
+}
+
+.mission-btn {
+  min-width: 78px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-color: rgba(106, 211, 209, 0.5);
 }
 
 .news-list {
@@ -673,12 +739,17 @@ h3 {
   .planet-panel,
   .market-panel,
   .cargo-panel,
+  .missions-panel,
   .news-panel,
   .log-panel {
     padding: 12px;
   }
 
   .status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-card {
     grid-template-columns: 1fr;
   }
 

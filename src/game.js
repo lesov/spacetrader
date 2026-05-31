@@ -3,6 +3,7 @@ import { buildShipState } from "./combat/rules.js";
 import { cloneCombatPresets } from "./combat/uiState.js";
 import { FUEL_RESOURCE_ID, campaign, planets, resources, startingPlayer } from "./data.js";
 import { applyMarketModifier, getMarketModifier } from "./events.js";
+import { createMissionState, getMissionCargoUsed } from "./missions.js";
 
 export const PLANET_BY_ID = Object.fromEntries(planets.map((planet) => [planet.id, planet]));
 export const RESOURCE_BY_ID = Object.fromEntries(resources.map((resource) => [resource.id, resource]));
@@ -50,6 +51,10 @@ export function createInitialState() {
     cargo: {},
     combatPresets: cloneCombatPresets(),
     shipUpgrades: initialShipUpgrades,
+    missions: createMissionState({
+      currentPlanetId: startingPlayer.currentPlanetId,
+      currentDate: campaign.startDate
+    }),
     tradedAtCurrentLocation: false,
     mode: "trade",
     pendingTravel: null,
@@ -124,7 +129,7 @@ export function getEmergencyFuelQuote(state, destinationPlanetId) {
 }
 
 export function getCargoUsed(state) {
-  return Object.values(state.cargo).reduce((total, quantity) => total + quantity, 0);
+  return Object.values(state.cargo).reduce((total, quantity) => total + quantity, 0) + getMissionCargoUsed(state);
 }
 
 export function getCargoRemaining(state) {

@@ -19,6 +19,12 @@ import {
 import { getActiveMarketEvents, getMarketModifier } from "./events.js";
 import { getEncounterChance } from "./travelCombat.js";
 import {
+  ensureMissionState,
+  getMissionCargoUsed,
+  getMissionTypeLabel,
+  validateMissionDeparture
+} from "./missions.js";
+import {
   canBuyShip,
   canUpgrade,
   getShipCatalog,
@@ -75,7 +81,11 @@ export function getStatusView(state) {
     cargo: formatCargo(cargoUsed, state.cargoCapacity),
     currentPlanet: planet.name,
     routeLine: `${planet.name} ${planet.type.toLowerCase()} trade hub | ${getCargoRemaining(state)} cargo slots open`,
-    tradeStatus: state.mode === "combat" ? "In combat" : state.tradedAtCurrentLocation ? "Trade logged here" : "No local trade yet"
+    tradeStatus: state.mode === "combat"
+      ? "In combat"
+      : state.missions?.accepted
+        ? "Mission accepted"
+        : state.tradedAtCurrentLocation ? "Trade logged here" : "No local trade yet"
   };
 }
 
@@ -113,6 +123,7 @@ export function getDestinationRows(state) {
   return getDestinations(state.currentPlanetId).map((planet) => {
     const fuelCost = getTravelCost(state.currentPlanetId, planet.id);
     const emergencyFuel = getEmergencyFuelQuote(state, planet.id);
+    const missionDepartureError = validateMissionDeparture(state, planet.id);
     return {
       id: planet.id,
       name: planet.name,
@@ -124,7 +135,8 @@ export function getDestinationRows(state) {
       encounterRiskLabel: `${Math.round(getEncounterChance(state, planet.id) * 100)}% battle risk`,
       travelDurationDays: planet.travelDurationDays,
       travelDurationLabel: formatDuration(planet.travelDurationDays),
-      canTravel: state.fuel >= fuelCost,
+      canTravel: state.fuel >= fuelCost && !missionDepartureError,
+      missionDepartureError,
       requiresConfirmation: !state.tradedAtCurrentLocation,
       emergencyFuel: {
         ...emergencyFuel,
@@ -136,13 +148,22 @@ export function getDestinationRows(state) {
 }
 
 export function getCargoRows(state) {
-  return resources
+  const cargoRows = resources
     .filter((resource) => resource.id !== FUEL_RESOURCE_ID)
     .map((resource) => ({
       id: resource.id,
       name: resource.name,
       quantity: getOwnedQuantity(state, resource.id)
     }));
+  const missionCargo = getMissionCargoUsed(state);
+  if (missionCargo > 0) {
+    cargoRows.push({
+      id: "missionCargo",
+      name: "Mission Cargo",
+      quantity: missionCargo
+    });
+  }
+  return cargoRows;
 }
 
 export function getNewsRows(state) {
@@ -152,6 +173,18 @@ export function getNewsRows(state) {
     body: event.body,
     dateRange: `${formatDate(event.startsOn)} - ${formatDate(event.endsOn)}`
   }));
+}
+
+export function getMissionView(state) {
+  const missions = ensureMissionState(state);
+  const accepted = missions.accepted ? formatMissionRow(missions.accepted, state) : null;
+  return {
+    context: accepted ? "One mission accepted" : `${missions.offers.length} local offers`,
+    accepted,
+    rows: missions.offers.map((mission) => formatMissionRow(mission, state)),
+    hasAccepted: Boolean(accepted),
+    completed: missions.completed ?? []
+  };
 }
 
 export function getPlanetMapView(state) {
@@ -258,6 +291,37 @@ export function getShipyardView(state) {
       reason: powerCheck.reason
     },
     catalog
+  };
+}
+
+function formatMissionRow(mission, state) {
+  const destination = getPlanet(mission.destinationPlanetId);
+  const acceptedOrActive = Boolean(state.missions?.accepted || state.missions?.active);
+  const cargoBlocked = getCargoRemaining(state) < mission.cargoRequired && !state.missions?.accepted;
+  const details = [
+    destination.name,
+    `${mission.riskLevel} risk`,
+    mission.cargoRequired > 0 ? `${mission.cargoRequired} cargo` : "no cargo",
+    mission.encounterChance > 0 ? `${Math.round(mission.encounterChance * 100)}% contact` : "",
+    mission.failureChance > 0 ? `${Math.round(mission.failureChance * 100)}% inspection` : ""
+  ].filter(Boolean);
+
+  return {
+    id: mission.id,
+    type: mission.type,
+    typeLabel: getMissionTypeLabel(mission.type),
+    title: mission.title,
+    source: mission.source,
+    summary: mission.summary,
+    destinationName: destination.name,
+    rewardLabel: formatCredits(mission.rewardCredits),
+    cargoRequired: mission.cargoRequired,
+    status: mission.status,
+    detailLabel: details.join(" | "),
+    canAccept: !acceptedOrActive && !cargoBlocked,
+    acceptReason: acceptedOrActive
+      ? "Only one mission can be accepted at a time."
+      : cargoBlocked ? `Needs ${mission.cargoRequired} open cargo slots.` : ""
   };
 }
 

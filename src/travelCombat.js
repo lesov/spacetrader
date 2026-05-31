@@ -17,6 +17,15 @@ import {
   serializeCombatShip,
   getEffectivePowerCapacity
 } from "./game.js";
+import {
+  activateMissionForDeparture,
+  getActiveMissionCombatContext,
+  refreshMissionOffers,
+  resolveMissionArrival,
+  resolveMissionBattleOutcome,
+  resolveMissionDepartureEvent,
+  validateMissionDeparture
+} from "./missions.js";
 
 // Enemy spawn weights. More powerful classes appear less frequently.
 // Cumulative thresholds: falcon 45%, vanguard 30%, leviathan 15%, bastion 10%.
@@ -96,6 +105,11 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
     return fail(state, `Need ${fuelCost} fuel to reach ${destination.name}.`);
   }
 
+  const missionDepartureError = validateMissionDeparture(state, destination.id);
+  if (missionDepartureError) {
+    return fail(state, missionDepartureError);
+  }
+
   if (!state.tradedAtCurrentLocation && !confirmed) {
     const message = `Leave ${origin.name} without trading? Confirm travel to ${destination.name}.`;
     return {
@@ -108,7 +122,7 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
   }
 
   const departedState = appendMessage(
-    {
+    activateMissionForDeparture({
       ...state,
       fuel: state.fuel - fuelCost,
       pendingTravel: {
@@ -119,13 +133,35 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
         encounterRolled: false,
         encounterTriggered: false
       }
-    },
+    }, destination.id),
     `Departed ${origin.name} for ${destination.name}. Fuel spent: ${fuelCost}.`
   );
 
-  const encounter = rollTravelEncounter(departedState, destination.id, rng);
+  const missionEvent = resolveMissionDepartureEvent(departedState, rng);
+  let travelState = missionEvent.state;
+  if (missionEvent.message) {
+    travelState = appendMessage(travelState, missionEvent.message);
+  }
+
+  if (missionEvent.encounter) {
+    return startTravelBattle(
+      travelState,
+      destination.id,
+      rng,
+      { chance: missionEvent.encounter.chance, triggered: true },
+      missionEvent.encounter
+    );
+  }
+
+  const encounter = rollTravelEncounter(travelState, destination.id, rng);
   if (encounter.triggered) {
-    return startTravelBattle(departedState, destination.id, rng, encounter);
+    return startTravelBattle(
+      travelState,
+      destination.id,
+      rng,
+      encounter,
+      getActiveMissionCombatContext(travelState)
+    );
   }
 
   return {
@@ -134,9 +170,9 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
     message: `No hostile contact. Arrived at ${destination.name}.`,
     state: completeTravel(
       {
-        ...departedState,
+        ...travelState,
         pendingTravel: {
-          ...departedState.pendingTravel,
+          ...travelState.pendingTravel,
           encounterRolled: true,
           encounterTriggered: false
         }
@@ -147,14 +183,16 @@ export function beginTravel(state, destinationPlanetId, options = {}, rng) {
   };
 }
 
-export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
+export function startTravelBattle(state, destinationPlanetId, rng, encounter, missionContext = null) {
   const destination = getPlanet(destinationPlanetId);
-  const enemyClassId = rollEnemyClass(rng);
+  const enemyClassId = missionContext?.enemyClassId ?? rollEnemyClass(rng);
   const battle = rehydratePlayerShip(createBattleState(PLAYER_CLASS_ID, enemyClassId), state.playerCombatShip, state);
   const seed = Math.floor(rng.next() * 0xffffffff);
   const risk = Math.round(encounter.chance * 100);
   const enemyLabel = SHIP_CLASSES[enemyClassId]?.label ?? enemyClassId;
-  const message = `Hostile contact en route to ${destination.name}: ${enemyLabel}. Battle risk was ${risk}%.`;
+  const message = missionContext?.missionId
+    ? `Mission contact en route to ${destination.name}: ${enemyLabel}. Battle risk was ${risk}%.`
+    : `Hostile contact en route to ${destination.name}: ${enemyLabel}. Battle risk was ${risk}%.`;
 
   return {
     ok: true,
@@ -172,7 +210,8 @@ export function startTravelBattle(state, destinationPlanetId, rng, encounter) {
         combat: {
           battle,
           rngSeed: seed,
-          enemyClassId
+          enemyClassId,
+          missionContext
         }
       },
       message
@@ -333,18 +372,20 @@ export function applyBattleOutcome(state, rng) {
   const message = battle.winner === "draw"
     ? "Both ships were destroyed. Run ended."
     : "Your ship was destroyed. Run ended.";
+  const missionOutcome = resolveMissionBattleOutcome(state, battle.winner);
+  const outcomeMessage = [message, missionOutcome.message].filter(Boolean).join(" ");
 
   return {
     ok: false,
     gameOver: true,
-    message,
+    message: outcomeMessage,
     state: appendMessage(
       {
-        ...state,
+        ...missionOutcome.state,
         mode: "gameOver",
         pendingTravel: null
       },
-      message
+      outcomeMessage
     )
   };
 }
@@ -377,19 +418,24 @@ function applyCompletedTravelBattle(state, battle, rng) {
     const nextCargo = salvageParts > 0
       ? { ...cargoAfterLoss, shipParts: (cargoAfterLoss.shipParts ?? 0) + salvageParts }
       : cargoAfterLoss;
+    const missionOutcome = resolveMissionBattleOutcome(
+      {
+        ...state,
+        credits: state.credits + salvageCredits,
+        cargo: nextCargo,
+        playerCombatShip: serializeCombatShip(battle.player, false)
+      },
+      battle.winner
+    );
+    const fullOutcomeText = [outcomeText, missionOutcome.message].filter(Boolean).join(" ");
 
     return {
       ok: true,
-      message: outcomeText,
+      message: fullOutcomeText,
       state: completeTravel(
-        {
-          ...state,
-          credits: state.credits + salvageCredits,
-          cargo: nextCargo,
-          playerCombatShip: serializeCombatShip(battle.player, false)
-        },
+        missionOutcome.state,
         destinationId,
-        outcomeText
+        fullOutcomeText
       )
     };
 }
@@ -398,18 +444,21 @@ export function completeTravel(state, destinationPlanetId, message) {
   const destination = getPlanet(destinationPlanetId);
   const persistentShip = restoreDockedShields(state.playerCombatShip);
   const travelDurationDays = state.pendingTravel?.travelDurationDays ?? 0;
+  const dockedState = {
+    ...state,
+    mode: "trade",
+    currentPlanetId: destination.id,
+    currentDate: advanceDate(state.currentDate, travelDurationDays),
+    pendingTravel: null,
+    combat: null,
+    tradedAtCurrentLocation: false,
+    playerCombatShip: persistentShip
+  };
+  const missionArrival = resolveMissionArrival(dockedState, destination.id);
+  const finalMessage = [message, missionArrival.message].filter(Boolean).join(" ");
   return appendMessage(
-    {
-      ...state,
-      mode: "trade",
-      currentPlanetId: destination.id,
-      currentDate: advanceDate(state.currentDate, travelDurationDays),
-      pendingTravel: null,
-      combat: null,
-      tradedAtCurrentLocation: false,
-      playerCombatShip: persistentShip
-    },
-    `${message} Time elapsed: ${formatDuration(travelDurationDays)}.`
+    refreshMissionOffers(missionArrival.state),
+    `${finalMessage} Time elapsed: ${formatDuration(travelDurationDays)}.`
   );
 }
 

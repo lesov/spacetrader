@@ -22,6 +22,7 @@ import {
   getDestinationRows,
   getMapLegendRows,
   getMarketRows,
+  getMissionView,
   getNewsRows,
   getPlanetMapView,
   getProjectedMapView,
@@ -57,6 +58,7 @@ import {
   getLocationVisual,
   getShipVisual
 } from "./visualAssets.js";
+import { abandonAcceptedMission, acceptMission } from "./missions.js";
 
 let state = createInitialState();
 let rng = createRng(Date.now());
@@ -97,6 +99,9 @@ const elements = {
   marketContext: document.querySelector("#market-context"),
   cargoList: document.querySelector("#cargo-list"),
   cargoContext: document.querySelector("#cargo-context"),
+  missionsContext: document.querySelector("#missions-context"),
+  acceptedMission: document.querySelector("#accepted-mission"),
+  missionList: document.querySelector("#mission-list"),
   newsList: document.querySelector("#news-list"),
   messageLog: document.querySelector("#message-log"),
   resetButton: document.querySelector("#reset-button"),
@@ -217,6 +222,7 @@ function renderTrade() {
   renderMapLegend();
   renderMarket();
   renderCargo();
+  renderMissions();
   renderNews();
   renderShipyard();
   renderLog();
@@ -267,6 +273,9 @@ function renderPlanetPanel() {
       button.type = "button";
       button.className = "destination-button";
       button.disabled = !destination.canTravel;
+      if (destination.missionDepartureError) {
+        button.title = destination.missionDepartureError;
+      }
       button.innerHTML = `<span>${destination.name}<small>${destination.type} | ${destination.factionAlignment} | ${destination.riskLevel} risk | ${destination.encounterRiskLabel}</small></span><strong>${destination.fuelCost} fuel | ${destination.travelDurationLabel}</strong>`;
       button.addEventListener("click", () => handleTravel(destination.id));
       row.appendChild(button);
@@ -338,6 +347,47 @@ function renderCargo() {
     return item;
   });
   elements.cargoList.replaceChildren(...rows);
+}
+
+function renderMissions() {
+  const view = getMissionView(state);
+  elements.missionsContext.textContent = view.context;
+
+  if (view.accepted) {
+    const accepted = document.createElement("div");
+    accepted.className = "mission-card accepted";
+    accepted.innerHTML = renderMissionMarkup(view.accepted, "Accepted");
+
+    const abandonButton = document.createElement("button");
+    abandonButton.type = "button";
+    abandonButton.className = "mission-btn";
+    abandonButton.textContent = "Abandon";
+    abandonButton.addEventListener("click", () => applyResult(abandonAcceptedMission(state)));
+    accepted.appendChild(abandonButton);
+    elements.acceptedMission.replaceChildren(accepted);
+  } else {
+    elements.acceptedMission.replaceChildren();
+  }
+
+  elements.missionList.replaceChildren(
+    ...view.rows.map((mission) => {
+      const card = document.createElement("div");
+      card.className = "mission-card";
+      card.innerHTML = renderMissionMarkup(mission, mission.typeLabel);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mission-btn";
+      button.textContent = "Accept";
+      button.disabled = !mission.canAccept;
+      if (mission.acceptReason) {
+        button.title = mission.acceptReason;
+      }
+      button.addEventListener("click", () => applyResult(acceptMission(state, mission.id)));
+      card.appendChild(button);
+      return card;
+    })
+  );
 }
 
 function renderNews() {
@@ -855,6 +905,18 @@ function renderSliderMarkup(id, label, slider) {
     <div class="quantity-slider">
       <input id="${id}" type="range" min="${slider.min}" max="${slider.max}" step="1" value="${slider.value}" aria-label="${label}" ${slider.disabled ? "disabled" : ""}>
       <output data-slider-label="${id}" for="${id}">${slider.label}</output>
+    </div>
+  `;
+}
+
+function renderMissionMarkup(mission, label) {
+  return `
+    <div class="mission-info">
+      <span class="mission-type">${label}</span>
+      <strong>${mission.title}</strong>
+      <small>${mission.source} | ${mission.detailLabel}</small>
+      <p>${mission.summary}</p>
+      <span class="mission-reward">${mission.rewardLabel}</span>
     </div>
   `;
 }

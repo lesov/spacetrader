@@ -1,5 +1,32 @@
 # Agent Changelog
 
+## 2026-05-31 17:57 CDT - Codex - feature/codex/missions
+
+- Status: approved
+- Summary: Human approved the missions UI and requested pushing the current feature branch to `origin`.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Approval logging only; previous verification for this branch passed with `npm test`, JS syntax checks, `git diff --check`, and static server smoke checks.
+- UI review: approved-by-human
+- Blockers or coordination notes: Proceeding with scoped commit and push of `feature/codex/missions`. Existing untracked `.claude/` and `ideas.txt` remain untouched.
+
+## 2026-05-31 13:29 CDT - Codex - feature/codex/missions
+
+- Status: ready-for-review
+- Summary: Implemented dockside missions: four deterministic local offers per port, one accepted mission at a time, contraband cargo reservation, immediate departure expiration, route locking, contraband inspection, patrol/bounty/escort mission encounters, mission reward/failure handling through travel and combat, and a missions UI panel.
+- Files changed: `index.html`, `src/app.js`, `src/game.js`, `src/missions.js`, `src/travelCombat.js`, `src/uiState.js`, `src/styles.css`, `test/missions.test.js`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` — pass. `node --check src/app.js`, `src/game.js`, `src/travelCombat.js`, `src/uiState.js`, and `src/missions.js` — pass. `git diff --check` — pass. `curl -I http://127.0.0.1:4178`, `/src/app.js`, `/src/missions.js`, and `/src/styles.css` — all `200 OK`.
+- UI review: pending-human-test at `http://127.0.0.1:4178`
+- Blockers or coordination notes: UI changes require human testing and explicit approval before completion. Work remains on `feature/codex/missions`; no merge to `main` or tag without explicit human approval.
+
+## 2026-05-31 13:21 CDT - Codex - feature/codex/missions
+
+- Status: started
+- Summary: Beginning implementation of single-active-mission gameplay with dockside mission offers, immediate-on-departure mission resolution, mission combat hooks, UI panel, and regression tests.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Not yet; implementation in progress.
+- UI review: pending-human-test
+- Blockers or coordination notes: Created dedicated branch from `feature/codex/generated-visual-assets` so approved visual work remains in this line. Existing untracked `.claude/` and `ideas.txt` are left untouched.
+
 ## 2026-05-31 10:32 CDT - Codex - feature/codex/generated-visual-assets
 
 - Status: approved

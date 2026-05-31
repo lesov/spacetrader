@@ -49,6 +49,14 @@ import {
   setCombatPresetAllocation,
   systemTooltip
 } from "./combat/uiState.js";
+import {
+  LOCATION_VISUALS,
+  MAP_VISUAL,
+  getAlignmentVisual,
+  getBattleDamageVisual,
+  getLocationVisual,
+  getShipVisual
+} from "./visualAssets.js";
 
 let state = createInitialState();
 let rng = createRng(Date.now());
@@ -75,8 +83,11 @@ const elements = {
   tradeStatus: document.querySelector("#trade-status"),
   routeLine: document.querySelector("#route-line"),
   planetHeading: document.querySelector("#planet-heading"),
+  locationVisual: document.querySelector("#location-visual"),
   planetNote: document.querySelector("#planet-note"),
   locationAlignment: document.querySelector("#location-alignment"),
+  alignmentVisual: document.querySelector("#alignment-visual"),
+  alignmentCaption: document.querySelector("#alignment-caption"),
   locationRisk: document.querySelector("#location-risk"),
   strategicContext: document.querySelector("#strategic-context"),
   productionList: document.querySelector("#production-list"),
@@ -94,12 +105,14 @@ const elements = {
   cancelTravelButton: document.querySelector("#cancel-travel"),
   confirmTravelButton: document.querySelector("#confirm-travel"),
   canvas: document.querySelector("#star-map"),
+  playerShipVisual: document.querySelector("#player-ship-visual"),
   playerName: document.querySelector("#player-name"),
   playerHull: document.querySelector("#player-hull"),
   playerHullBar: document.querySelector("#player-hull-bar"),
   playerShield: document.querySelector("#player-shield"),
   playerShieldBar: document.querySelector("#player-shield-bar"),
   playerPower: document.querySelector("#player-power"),
+  enemyShipVisual: document.querySelector("#enemy-ship-visual"),
   enemyName: document.querySelector("#enemy-name"),
   enemyHull: document.querySelector("#enemy-hull"),
   enemyHullBar: document.querySelector("#enemy-hull-bar"),
@@ -119,6 +132,7 @@ const elements = {
   resultHeading: document.querySelector("#result-heading"),
   resultSubtext: document.querySelector("#result-subtext"),
   continueFromBattle: document.querySelector("#continue-from-battle"),
+  battleDamageVisual: document.querySelector("#battle-damage-visual"),
   combatLog: document.querySelector("#combat-log")
 };
 
@@ -129,6 +143,10 @@ const stars = Array.from({ length: 90 }, (_, index) => ({
   radius: 0.7 + (index % 3) * 0.35,
   drift: 0.08 + (index % 5) * 0.015
 }));
+const mapBackdrop = loadCanvasImage(MAP_VISUAL.src);
+const mapLocationImages = new Map(
+  Object.entries(LOCATION_VISUALS).map(([planetId, asset]) => [planetId, loadCanvasImage(asset.src)])
+);
 
 elements.resetButton.addEventListener("click", resetRun);
 elements.gameOverReset.addEventListener("click", resetRun);
@@ -220,9 +238,12 @@ function renderStatus() {
 
 function renderPlanetPanel() {
   const planet = getPlanet(state.currentPlanetId);
+  setVisualImage(elements.locationVisual, getLocationVisual(planet.id));
   elements.planetHeading.textContent = planet.name;
   elements.planetNote.textContent = `${planet.type} | ${planet.summary}`;
   elements.locationAlignment.textContent = planet.factionAlignment;
+  setVisualImage(elements.alignmentVisual, getAlignmentVisual(planet.factionAlignment));
+  elements.alignmentCaption.textContent = planet.factionAlignment;
   elements.locationRisk.textContent = `${planet.riskLevel} risk`;
   elements.locationRisk.dataset.risk = planet.riskLevel;
   elements.strategicContext.textContent = planet.strategicContext;
@@ -345,14 +366,18 @@ function renderShipyard() {
 
   // Current ship info
   const shipInfo = document.createElement("div");
+  const currentShipVisual = getShipVisual(view.currentShip.classId);
   shipInfo.className = "shipyard-section";
   shipInfo.innerHTML = `
     <h3>Active Vessel</h3>
-    <div class="shipyard-ship-info">
-      <span class="shipyard-stat">Power: <strong>${view.currentShip.effectivePower}</strong></span>
-      <span class="shipyard-stat">Cargo: <strong>${view.currentShip.effectiveCargo}</strong></span>
-      <span class="shipyard-stat">Cargo upgrades: <strong>${view.currentShip.cargoUpgradeLevel}/${view.currentShip.cargoUpgradeMax}</strong></span>
-      <span class="shipyard-stat">Engine upgrades: <strong>${view.currentShip.powerUpgradeLevel}/${view.currentShip.powerUpgradeMax}</strong></span>
+    <div class="shipyard-active-layout">
+      <img class="shipyard-ship-visual" src="${currentShipVisual.src}" alt="${currentShipVisual.alt}">
+      <div class="shipyard-ship-info">
+        <span class="shipyard-stat">Power: <strong>${view.currentShip.effectivePower}</strong></span>
+        <span class="shipyard-stat">Cargo: <strong>${view.currentShip.effectiveCargo}</strong></span>
+        <span class="shipyard-stat">Cargo upgrades: <strong>${view.currentShip.cargoUpgradeLevel}/${view.currentShip.cargoUpgradeMax}</strong></span>
+        <span class="shipyard-stat">Engine upgrades: <strong>${view.currentShip.powerUpgradeLevel}/${view.currentShip.powerUpgradeMax}</strong></span>
+      </div>
     </div>
   `;
   sections.push(shipInfo);
@@ -405,6 +430,7 @@ function renderShipyard() {
   for (const entry of view.catalog) {
     const row = document.createElement("div");
     row.className = `shipyard-catalog-row${entry.isCurrent ? " current-ship" : ""}`;
+    const shipVisual = getShipVisual(entry.classId);
 
     const basePowerText = Object.entries(entry.basePower)
       .filter(([, v]) => v > 0)
@@ -412,6 +438,7 @@ function renderShipyard() {
       .join(", ");
 
     row.innerHTML = `
+      <img class="catalog-ship-visual" src="${shipVisual.src}" alt="${shipVisual.alt}">
       <div class="catalog-info">
         <strong>${entry.label}${entry.isCurrent ? " (active)" : ""}</strong>
         <small>Power ${entry.powerCapacity} | Cargo ${entry.cargoCapacity} | Hull ${entry.hullMax} | Shield ${entry.shieldMax}${basePowerText ? ` | Innate: ${basePowerText}` : ""}</small>
@@ -455,6 +482,7 @@ function renderCombat() {
   const battle = state.combat.battle;
   const { player, enemy, turn, phase, winner, log } = battle;
 
+  setVisualImage(elements.playerShipVisual, getShipVisual(player.classId));
   elements.playerName.textContent = player.label;
   elements.playerHull.textContent = formatHull(player.hull, player.hullMax);
   elements.playerHullBar.textContent = formatBar(player.hull, player.hullMax);
@@ -462,6 +490,7 @@ function renderCombat() {
   elements.playerShieldBar.textContent = formatBar(player.shield, player.shieldMax);
   elements.playerPower.textContent = player.powerCapacity;
 
+  setVisualImage(elements.enemyShipVisual, getShipVisual(enemy.classId));
   elements.enemyName.textContent = enemy.label;
   elements.enemyHull.textContent = formatHull(enemy.hull, enemy.hullMax);
   elements.enemyHullBar.textContent = formatBar(enemy.hull, enemy.hullMax);
@@ -470,6 +499,7 @@ function renderCombat() {
 
   elements.turnNumber.textContent = turn;
   elements.phaseLabel.textContent = phaseLabel(phase);
+  setVisualImage(elements.battleDamageVisual, getBattleDamageVisual(player));
 
   elements.allocationPanel.hidden = phase !== "allocate";
   elements.actionPanel.hidden = phase !== "action";
@@ -655,8 +685,14 @@ function renderGameOver() {
 function drawMap() {
   const { width, height } = resizeMapCanvas();
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#07080d";
-  ctx.fillRect(0, 0, width, height);
+  if (isImageReady(mapBackdrop)) {
+    drawCoverImage(ctx, mapBackdrop, 0, 0, width, height);
+    ctx.fillStyle = "rgba(7, 8, 13, 0.44)";
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    ctx.fillStyle = "#07080d";
+    ctx.fillRect(0, 0, width, height);
+  }
 
   for (const star of stars) {
     star.x = (star.x + star.drift / width) % 1;
@@ -679,18 +715,34 @@ function drawMap() {
   }
 
   for (const planet of mapPlanets) {
-    ctx.beginPath();
-    ctx.arc(planet.x, planet.y, planet.active ? 14 : 10, 0, Math.PI * 2);
     const markerColor = planet.active ? MAP_MARKER_COLORS.current : getRiskColor(planet.riskLevel);
-    ctx.fillStyle = markerColor;
+    const radius = planet.active ? 18 : 13;
+    const image = mapLocationImages.get(planet.id);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(planet.x, planet.y, radius, 0, Math.PI * 2);
+    ctx.clip();
+    if (isImageReady(image)) {
+      drawCoverImage(ctx, image, planet.x - radius, planet.y - radius, radius * 2, radius * 2);
+    } else {
+      ctx.fillStyle = markerColor;
+      ctx.fillRect(planet.x - radius, planet.y - radius, radius * 2, radius * 2);
+    }
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(planet.x, planet.y, radius, 0, Math.PI * 2);
+    ctx.lineWidth = planet.active ? 3 : 2;
+    ctx.strokeStyle = markerColor;
     ctx.shadowColor = planet.active ? MAP_MARKER_COLORS.moderate : markerColor;
-    ctx.shadowBlur = planet.active ? 18 : 8;
-    ctx.fill();
+    ctx.shadowBlur = planet.active ? 18 : 9;
+    ctx.stroke();
     ctx.shadowBlur = 0;
 
     ctx.font = planet.active ? "700 15px system-ui" : "600 13px system-ui";
     ctx.fillStyle = "#f4f0e8";
-    ctx.fillText(planet.name, planet.x + 18, planet.y + 5);
+    ctx.fillText(planet.name, planet.x + radius + 7, planet.y + 5);
   }
 }
 
@@ -844,6 +896,46 @@ function closeTravelDialog() {
   if (elements.travelDialog.open) {
     elements.travelDialog.close();
   }
+}
+
+function loadCanvasImage(src) {
+  const image = new Image();
+  image.addEventListener("load", () => {
+    if (state.mode === "trade") {
+      drawMap();
+    }
+  });
+  image.src = src;
+  return image;
+}
+
+function setVisualImage(image, asset) {
+  if (!image || !asset) return;
+  image.src = asset.src;
+  image.alt = asset.alt;
+}
+
+function isImageReady(image) {
+  return image?.complete && image.naturalWidth > 0;
+}
+
+function drawCoverImage(canvasContext, image, x, y, width, height) {
+  const sourceRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = width / height;
+  let sourceWidth = image.naturalWidth;
+  let sourceHeight = image.naturalHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+
+  if (sourceRatio > targetRatio) {
+    sourceWidth = image.naturalHeight * targetRatio;
+    sourceX = (image.naturalWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = image.naturalWidth / targetRatio;
+    sourceY = (image.naturalHeight - sourceHeight) / 2;
+  }
+
+  canvasContext.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
 }
 
 function getRiskColor(riskLevel) {

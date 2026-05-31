@@ -92,6 +92,19 @@ h3 {
 
 .ship-status.enemy-status { text-align: right; }
 
+.combat-ship-visual {
+  width: min(220px, 100%);
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(244, 240, 232, 0.18);
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--input);
+}
+
+.enemy-status .combat-ship-visual {
+  justify-self: end;
+}
+
 .ship-name {
   font-size: 0.9rem;
   font-weight: 700;
@@ -131,6 +144,21 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(17, 18, 23, 0.9);
+}
+
+.battle-visual-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 220px;
+  background: rgba(7, 8, 13, 0.9);
+}
+
+.battle-damage-visual {
+  display: block;
+  width: 100%;
+  height: clamp(220px, 32vw, 380px);
+  object-fit: cover;
 }
 
 /* ── Tooltips ────────────────────────────────────────────────────────────── */
@@ -388,6 +416,7 @@ h3 {
     grid-template-columns: 1fr;
   }
   .enemy-status { text-align: left; }
+  .enemy-status .combat-ship-visual { justify-self: start; }
   .enemy-status .stat-row { justify-content: flex-start; }
   .allocation-grid {
     grid-template-columns: repeat(3, 1fr);

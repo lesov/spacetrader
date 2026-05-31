@@ -1,5 +1,32 @@
 # Agent Changelog
 
+## 2026-05-31 10:32 CDT - Codex - feature/codex/generated-visual-assets
+
+- Status: approved
+- Summary: Human approved the generated visual asset UI and requested pushing the current feature branch to `origin`.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Approval logging only; previous verification for this branch passed with `npm test`, `node --check src/app.js`, `node --check src/visualAssets.js`, `git diff --check`, and static server smoke checks.
+- UI review: approved-by-human
+- Blockers or coordination notes: Proceeding with scoped commit and push of `feature/codex/generated-visual-assets`. Existing untracked `.claude/` and `ideas.txt` remain untouched.
+
+## 2026-05-30 19:06 CDT - Codex - feature/codex/generated-visual-assets
+
+- Status: ready-for-review
+- Summary: Integrated generated visuals into the web app: current-location planet art, alignment emblems, ship class images in shipyard and combat, battle damage scene selection by player hull condition, starfield map backdrop, and planet image markers on the route map.
+- Files changed: `index.html`, `src/app.js`, `src/styles.css`, `src/combat/styles.css`, `src/visualAssets.js`, `test/visualAssets.test.js`, `src/assets/visuals/*`, `AGENT_CHANGELOG.md`
+- Tests run: `npm test` — pass. `node --check src/app.js` — pass. `node --check src/visualAssets.js` — pass. `git diff --check` — pass. `curl -I http://127.0.0.1:4177`, `/src/app.js`, `/src/assets/visuals/map/starfield.png`, and `/src/assets/visuals/locations/luna.png` — all `200 OK`.
+- UI review: pending-human-test at `http://127.0.0.1:4177`
+- Blockers or coordination notes: UI changes require human testing and explicit approval before completion. Existing untracked `.claude/` and `ideas.txt` remain untouched. Work remains on the dedicated feature branch; no merge to `main` or tag without explicit human approval.
+
+## 2026-05-28 23:23 CDT - Codex - feature/codex/generated-visual-assets
+
+- Status: started
+- Summary: Beginning generated visual asset pass for ship class art, battle damage imagery, planet/location imagery, and richer map visuals using the `imagegen` skill.
+- Files changed: `AGENT_CHANGELOG.md`
+- Tests run: Not yet; implementation in progress.
+- UI review: pending-human-test
+- Blockers or coordination notes: Working on a dedicated branch from `main`. Existing untracked `.claude/`, `.ideas.txt.swp`, and `ideas.txt` are left untouched.
+
 ## 2026-05-28 23:21 CDT - Codex - feature/claude/ship-upgrades-and-purchasing
 
 - Status: approved

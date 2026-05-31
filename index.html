@@ -56,6 +56,9 @@
           </div>
 
           <aside class="planet-panel" aria-labelledby="planet-heading">
+            <figure class="location-visual-frame">
+              <img id="location-visual" class="location-visual" alt="">
+            </figure>
             <div>
               <p class="eyebrow">Current Market</p>
               <h2 id="planet-heading"></h2>
@@ -64,6 +67,10 @@
                 <span id="location-alignment"></span>
                 <span id="location-risk"></span>
               </div>
+              <figure class="alignment-visual-strip">
+                <img id="alignment-visual" class="alignment-visual" alt="">
+                <figcaption id="alignment-caption"></figcaption>
+              </figure>
               <p id="strategic-context" class="strategic-context"></p>
             </div>
             <div>
@@ -140,6 +147,7 @@
         <section id="combat-mode" class="battle-shell embedded-battle" aria-label="Travel battle" hidden>
           <header class="battle-topbar">
             <div class="ship-status player-status" id="player-status">
+              <img id="player-ship-visual" class="combat-ship-visual" alt="">
               <div class="ship-name" id="player-name"></div>
               <div class="stat-row">
                 <span class="stat-label">Hull</span>
@@ -163,6 +171,7 @@
             </div>
 
             <div class="ship-status enemy-status">
+              <img id="enemy-ship-visual" class="combat-ship-visual" alt="">
               <div class="ship-name" id="enemy-name"></div>
               <div class="stat-row">
                 <span class="stat-label">Hull</span>
@@ -176,6 +185,10 @@
               </div>
             </div>
           </header>
+
+          <section class="battle-visual-panel" aria-label="Battle damage view">
+            <img id="battle-damage-visual" class="battle-damage-visual" alt="">
+          </section>
 
           <section class="battle-panel" id="allocation-panel">
             <h2>Allocate Power</h2>
